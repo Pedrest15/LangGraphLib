@@ -32,9 +32,30 @@
     - `invoke()` / `ainvoke()`: Executa o agente com state fornecido
     - `input_field` / `output_field`: Campos configuráveis do state
     - Suporte a `prompt` via `ChatPromptTemplate`
-    - Suporte a `tools` via `bind_tools()`
-    - Retorna dict parcial para atualização do state (compatível com LangGraph)
-  - Não executa tools - apenas retorna resposta para o Workflow decidir
+    - Suporte a `tools` via `bind_tools()` - retorna `Command` para `{name}_tools`
+    - Suporte a `destinations` para roteamento dinâmico via structured output
+      - LLM decide próximo nó entre destinos válidos (Literal)
+      - Retorna `Command(goto=destino, update={...})`
+    - Retorna dict ou `Command` dependendo da configuração
+
+- **Módulo `workflow.py`**
+  - `Workflow`: Orquestração de agentes em grafo LangGraph
+    - API simplificada com edges como tuplas de strings
+    - Edges fixas: `("start", "agent")`, `("agent", "end")`
+    - Edges condicionais com strings built-in ou callables:
+      - `("agent", "agent_tools", "has_tool_calls")`
+      - `("agent", "end", lambda s: s.is_done)`
+    - Conversão automática de "start"/"end" para `START`/`END`
+    - Criação automática de `ToolNode` com padrão `{agent_name}_tools`
+    - Parâmetro `mode`: escolha entre execução `"sync"` ou `"async"`
+    - Suporte a `checkpointer` para persistência de estado
+    - `compile()`: Compila o workflow em `CompiledStateGraph`
+    - `get_image()`: Retorna imagem do grafo em base64
+    - `graph` property: Acesso ao grafo compilado
+
+- **Módulo `edge.py`**
+  - `Condition`: Type alias para condições (string ou callable)
+  - `Edge`: Type alias para edges (tupla de 2 ou 3 elementos)
 
 - **Documentação**
   - `CLAUDE.md`: Instruções do projeto e convenções de código
@@ -48,6 +69,8 @@ LangGraphLib/
 │   ├── state.py          ✅ Implementado
 │   ├── model.py          ✅ Implementado
 │   ├── agent.py          ✅ Implementado
+│   ├── workflow.py       ✅ Implementado
+│   ├── edge.py           ✅ Implementado
 │   └── py.typed
 ├── pyproject.toml
 ├── CLAUDE.md
@@ -57,7 +80,8 @@ LangGraphLib/
 
 ### Próximos passos
 
-- [ ] `workflow.py` - Orquestração de agentes com StateGraph
 - [ ] `tools.py` - Decorators e registro de tools
 - [ ] `memory.py` - Abstrações de Checkpointer e Store
 - [ ] `hierarchy.py` - Supervisor e times de agentes
+- [ ] Atualizar `__init__.py` com exports públicos
+- [ ] Testes unitários
