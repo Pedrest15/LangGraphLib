@@ -4,6 +4,35 @@
 
 ### Adicionado
 
+- **Carregamento automático de variáveis de ambiente**
+  - `python-dotenv>=1.0` como dependência
+  - `load_dotenv()` automático em `model.py`
+  - API keys podem ser definidas via arquivo `.env`
+
+- **Testes de cenários (`tests/test_scenarios.py`)**
+  - Cenário 1: Agente simples com messages
+  - Cenário 2: Calculadora com tools (add, sub, mult, div)
+  - Cenário 3: Supervisor com subnós de funções (destinations)
+  - Cenário 3b: Roteamento via conditional_edges (sem destinations)
+  - Cenário 4: Grafo supervisor-escritor-revisor com loop
+
+### Corrigido
+
+- **Import de prompts em `agent.py`**
+  - Alterado de `langchain.prompts` para `langchain_core.prompts`
+
+- **Conversão de string para AIMessage em structured output**
+  - Adicionado método `_process_output_value()` em `Agent`
+  - Quando `output_fields` inclui `messages` e o valor é string, converte para `[AIMessage(content=value)]`
+  - Corrige `TypeError: can only concatenate list (not "str") to list` com reducer `add_messages`
+
+- **Aviso "wrote to unknown channel branch:to:end"**
+  - Adicionado método `_resolve_goto()` em `Agent`
+  - Converte string "end" para constante `END` do LangGraph
+  - Aplicado em `invoke()` e `ainvoke()`
+
+---
+
 - **Configuração inicial do projeto**
   - Inicialização com `uv init --lib`
   - Configuração do `pyproject.toml` com Python 3.13+
@@ -79,6 +108,8 @@ LangGraphLib/
 │   ├── workflow.py       ✅ Implementado
 │   ├── edge.py           ✅ Implementado
 │   └── py.typed
+├── tests/
+│   └── test_scenarios.py ✅ 5 cenários
 ├── pyproject.toml
 ├── CLAUDE.md
 ├── CHANGELOG.md

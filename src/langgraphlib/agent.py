@@ -1,14 +1,15 @@
 from collections.abc import Callable
-from typing import Any, Literal
+from typing import Annotated, Any, Literal, get_args, get_origin
 from uuid import uuid4
 
-from langchain.prompts import (
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.prompts import (
     ChatPromptTemplate,
     MessagesPlaceholder,
     SystemMessagePromptTemplate,
 )
-from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage
+from langgraph.graph import END
 from langgraph.types import Command
 from pydantic import BaseModel, Field, create_model
 
@@ -72,6 +73,24 @@ class Agent:
             destinations=["researcher", "writer", "end"],
         )
         # invoke() retorna Command(goto="researcher"|"writer"|"end", update={...})
+
+        # Agente com tipagem correta via state
+        # Se state é fornecido, os tipos dos output_fields são extraídos dele
+        CounterState = create_state(
+            include_messages=False,
+            query=(str, ""),
+            count=(int, 0),
+            response=(str, ""),
+        )
+        agent = Agent(
+            model=model,
+            prompt="Responda e conte quantas palavras.",
+            state=CounterState,  # tipos extraídos: count=int, response=str
+            input_fields="query",
+            output_fields=["response", "count"],
+            destinations=["next", "end"],
+        )
+        # O LLM retornará count como int, não str
     """
 
     def __init__(
@@ -82,6 +101,7 @@ class Agent:
         prompt: str | None = None,
         tools: list[Callable[..., Any]] | None = None,
         destinations: list[str] | None = None,
+        state: type[BaseModel] | None = None,
         input_fields: str | list[str] = "messages",
         output_fields: str | list[str] = "messages",
     ) -> None:
@@ -96,6 +116,9 @@ class Agent:
             destinations: Lista de nomes de nós para roteamento dinâmico.
                 Se fornecido, o agente usa structured output para decidir
                 o próximo nó e retorna Command ao invés de dict.
+            state: Classe do state para introspecção de tipos.
+                Se fornecido junto com destinations, os tipos dos output_fields
+                serão extraídos do state para garantir tipagem correta.
             input_fields: Campo(s) do state para ler input. Pode ser string
                 ou lista de strings para múltiplos campos.
             output_fields: Campo(s) do state para escrever output. Pode ser
@@ -105,6 +128,7 @@ class Agent:
         self._prompt = prompt
         self._tools = tools or []
         self._destinations = destinations
+        self._state_class = state
 
         # Normaliza para lista
         self._input_fields = (
@@ -119,14 +143,53 @@ class Agent:
         if destinations:
             self._router_schema = self._create_router_schema(destinations)
 
+        # Cria schema de output se necessário (sem destinations)
+        self._output_schema: type[BaseModel] | None = None
+        if not destinations and self._needs_structured_output():
+            self._output_schema = self._create_output_schema()
+
         # Monta o modelo com prompt e tools
         self._model = self._build_model(model)
+
+    def _get_field_type(self, field_name: str) -> type:
+        """
+        Extrai o tipo de um campo do state.
+
+        Lida com tipos Annotated (ex: Annotated[list[Message], add_messages])
+        extraindo o tipo base.
+
+        Args:
+            field_name: Nome do campo no state.
+
+        Returns:
+            Tipo do campo ou str como fallback.
+        """
+        if not self._state_class:
+            return str
+
+        # Obtém field_info do modelo Pydantic
+        field_info = self._state_class.model_fields.get(field_name)
+        if not field_info:
+            return str
+
+        field_type = field_info.annotation
+        if field_type is None:
+            return str
+
+        # Se é Annotated, extrai o tipo base (primeiro argumento)
+        if get_origin(field_type) is Annotated:
+            args = get_args(field_type)
+            if args:
+                return args[0]
+
+        return field_type
 
     def _create_router_schema(self, destinations: list[str]) -> type[BaseModel]:
         """
         Cria schema Pydantic dinâmico para roteamento.
 
         O schema força o LLM a retornar outputs E destino em uma única chamada.
+        Se state foi fornecido, usa os tipos reais dos campos.
 
         Args:
             destinations: Lista de nomes de nós válidos.
@@ -140,8 +203,9 @@ class Agent:
         # Monta campos dinamicamente para cada output_field
         fields: dict[str, Any] = {}
         for field_name in self._output_fields:
+            field_type = self._get_field_type(field_name)
             fields[field_name] = (
-                str,
+                field_type,
                 Field(description=f"Valor para o campo '{field_name}'."),
             )
 
@@ -153,16 +217,66 @@ class Agent:
 
         return create_model("RouterSchema", **fields)
 
+    def _create_output_schema(self) -> type[BaseModel]:
+        """
+        Cria schema Pydantic para structured output sem roteamento.
+
+        Usado quando há múltiplos output_fields ou tipos não-string,
+        forçando o LLM a respeitar os tipos corretos.
+
+        Returns:
+            Classe Pydantic com campos de output tipados.
+        """
+        fields: dict[str, Any] = {}
+        for field_name in self._output_fields:
+            field_type = self._get_field_type(field_name)
+            fields[field_name] = (
+                field_type,
+                Field(description=f"Valor para o campo '{field_name}'."),
+            )
+
+        return create_model("OutputSchema", **fields)
+
+    def _needs_structured_output(self) -> bool:
+        """
+        Determina se structured output deve ser usado (sem destinations).
+
+        Condições:
+        - state foi fornecido
+        - Pelo menos um output_field tem tipo diferente de str
+        - OU há múltiplos output_fields
+
+        Returns:
+            True se structured output deve ser aplicado.
+        """
+        if not self._state_class:
+            return False
+
+        # Se há múltiplos output_fields, precisa de structured output
+        if len(self._output_fields) > 1:
+            return True
+
+        # Se o único campo tem tipo diferente de str, precisa de structured output
+        if len(self._output_fields) == 1:
+            field_type = self._get_field_type(self._output_fields[0])
+            # Ignora 'messages' pois é tratado especialmente
+            if self._output_fields[0] != "messages" and field_type is not str:
+                return True
+
+        return False
+
     def _build_model(self, llm: BaseChatModel) -> BaseChatModel:
         """Constrói modelo com prompt template, tools e/ou structured output."""
         # Bind tools se fornecidas
         if self._tools:
             llm = llm.bind_tools(self._tools)
 
-        # Structured output para roteamento (se destinations e sem tools)
+        # Structured output: prioridade router_schema > output_schema
         # Tools têm prioridade - não pode usar structured output junto
         if self._router_schema and not self._tools:
             llm = llm.with_structured_output(self._router_schema)
+        elif self._output_schema and not self._tools:
+            llm = llm.with_structured_output(self._output_schema)
 
         # Aplica prompt template se fornecido
         if self._prompt:
@@ -213,6 +327,12 @@ class Agent:
         """Lista de destinos para roteamento dinâmico."""
         return self._destinations
 
+    def _resolve_goto(self, goto: str) -> str | object:
+        """Converte 'end' para constante END do LangGraph."""
+        if goto.lower() == "end":
+            return END
+        return goto
+
     def _prepare_input(self, state: BaseModel) -> dict[str, Any]:
         """Prepara input para o modelo a partir do state."""
         input_data: dict[str, Any] = {}
@@ -227,6 +347,18 @@ class Agent:
             input_data[field_name] = input_value
 
         return input_data
+
+    def _process_output_value(self, field_name: str, value: Any) -> Any:
+        """
+        Processa valor de output para garantir tipo correto.
+
+        Se o campo é 'messages' e o valor é string, converte para lista de AIMessage.
+        Isso é necessário porque structured output retorna strings, mas o reducer
+        add_messages espera lista de mensagens.
+        """
+        if field_name == "messages" and isinstance(value, str):
+            return [AIMessage(content=value)]
+        return value
 
     def invoke(self, state: BaseModel) -> dict[str, Any] | Command:
         """
@@ -243,7 +375,7 @@ class Agent:
         input_data = self._prepare_input(state)
         response = self._model.invoke(input_data)
 
-        # Caso 1: destinations (structured output) - response é dict/BaseModel
+        # Caso 1: destinations (router schema) - response é dict/BaseModel
         if self._destinations and self._router_schema and not self._tools:
             # Extrai goto
             if isinstance(response, dict):
@@ -255,13 +387,25 @@ class Agent:
             state_update: dict[str, Any] = {}
             for field_name in self._output_fields:
                 if isinstance(response, dict):
-                    state_update[field_name] = response.get(field_name, "")
+                    value = response.get(field_name, "")
                 else:
-                    state_update[field_name] = getattr(response, field_name, "")
+                    value = getattr(response, field_name, "")
+                state_update[field_name] = self._process_output_value(field_name, value)
 
-            return Command(goto=goto, update=state_update)
+            return Command(goto=self._resolve_goto(goto), update=state_update)
 
-        # Caso 2: tools ou padrão - response é AIMessage
+        # Caso 2: output schema (sem destinations) - response é dict/BaseModel
+        if self._output_schema and not self._tools:
+            state_update: dict[str, Any] = {}
+            for field_name in self._output_fields:
+                if isinstance(response, dict):
+                    value = response.get(field_name, "")
+                else:
+                    value = getattr(response, field_name, "")
+                state_update[field_name] = self._process_output_value(field_name, value)
+            return state_update
+
+        # Caso 3: tools ou padrão - response é AIMessage
         # Primeiro output field recebe a resposta
         primary_field = self._output_fields[0]
         output_value = [response] if primary_field == "messages" else response.content
@@ -292,7 +436,7 @@ class Agent:
         input_data = self._prepare_input(state)
         response = await self._model.ainvoke(input_data)
 
-        # Caso 1: destinations (structured output) - response é dict/BaseModel
+        # Caso 1: destinations (router schema) - response é dict/BaseModel
         if self._destinations and self._router_schema and not self._tools:
             # Extrai goto
             if isinstance(response, dict):
@@ -304,13 +448,25 @@ class Agent:
             state_update: dict[str, Any] = {}
             for field_name in self._output_fields:
                 if isinstance(response, dict):
-                    state_update[field_name] = response.get(field_name, "")
+                    value = response.get(field_name, "")
                 else:
-                    state_update[field_name] = getattr(response, field_name, "")
+                    value = getattr(response, field_name, "")
+                state_update[field_name] = self._process_output_value(field_name, value)
 
-            return Command(goto=goto, update=state_update)
+            return Command(goto=self._resolve_goto(goto), update=state_update)
 
-        # Caso 2: tools ou padrão - response é AIMessage
+        # Caso 2: output schema (sem destinations) - response é dict/BaseModel
+        if self._output_schema and not self._tools:
+            state_update: dict[str, Any] = {}
+            for field_name in self._output_fields:
+                if isinstance(response, dict):
+                    value = response.get(field_name, "")
+                else:
+                    value = getattr(response, field_name, "")
+                state_update[field_name] = self._process_output_value(field_name, value)
+            return state_update
+
+        # Caso 3: tools ou padrão - response é AIMessage
         # Primeiro output field recebe a resposta
         primary_field = self._output_fields[0]
         output_value = [response] if primary_field == "messages" else response.content
