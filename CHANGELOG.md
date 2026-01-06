@@ -30,12 +30,16 @@
 - **Módulo `agent.py`**
   - `Agent`: Classe para execução de LLMs com state dinâmico
     - `invoke()` / `ainvoke()`: Executa o agente com state fornecido
-    - `input_field` / `output_field`: Campos configuráveis do state
+    - `input_fields` / `output_fields`: Campos configuráveis do state
+      - Suporte a campo único (`str`) ou múltiplos campos (`list[str]`)
+      - Exemplo: `input_fields=["context", "question"]`
     - Suporte a `prompt` via `ChatPromptTemplate`
     - Suporte a `tools` via `bind_tools()` - retorna `Command` para `{name}_tools`
     - Suporte a `destinations` para roteamento dinâmico via structured output
       - LLM decide próximo nó entre destinos válidos (Literal)
       - Retorna `Command(goto=destino, update={...})`
+      - Schema dinâmico inclui todos os `output_fields` + `goto`
+      - Uma única chamada ao LLM (sem dupla chamada)
     - Retorna dict ou `Command` dependendo da configuração
 
 - **Módulo `workflow.py`**
@@ -47,6 +51,9 @@
       - `("agent", "end", lambda s: s.is_done)`
     - Conversão automática de "start"/"end" para `START`/`END`
     - Criação automática de `ToolNode` com padrão `{agent_name}_tools`
+    - Parâmetro `nodes`: dict de nós customizados (funções)
+      - Permite adicionar funções como nós do grafo
+      - Exemplo: `nodes={"formatter": format_output}`
     - Parâmetro `mode`: escolha entre execução `"sync"` ou `"async"`
     - Suporte a `checkpointer` para persistência de estado
     - `compile()`: Compila o workflow em `CompiledStateGraph`

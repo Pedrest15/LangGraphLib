@@ -87,13 +87,29 @@ class Workflow:
                 ("reviewer", "end"),
             ],
         )
+
+        # Nós customizados com funções (nodes)
+        def format_output(state: State) -> dict:
+            return {"output": state.messages[-1].content.upper()}
+
+        workflow = Workflow(
+            state=State,
+            agents=[writer],
+            nodes={"formatter": format_output},
+            edges=[
+                ("start", "writer"),
+                ("writer", "formatter"),
+                ("formatter", "end"),
+            ],
+        )
     """
 
     def __init__(
         self,
         state: type[BaseModel],
-        agents: list[Agent],
-        edges: list[Edge],
+        agents: list[Agent] | None = None,
+        edges: list[Edge] | None = None,
+        nodes: dict[str, Callable[..., Any]] | None = None,
         checkpointer: BaseCheckpointSaver | None = None,
         mode: Literal["sync", "async"] = "sync",
     ) -> None:
@@ -108,12 +124,15 @@ class Workflow:
                 - (source, target, condition): edge condicional
                   Conditions built-in: "has_tool_calls", "no_tool_calls"
                   Condition customizada: função (state) -> bool
+            nodes: Dict de nós customizados {nome: função}.
+                Funções devem receber state e retornar dict para update.
             checkpointer: Checkpointer para persistência de estado.
             mode: Modo de execução dos agentes ("sync" ou "async").
         """
         self._state = state
-        self._agents = {agent.name: agent for agent in agents}
-        self._edges = edges
+        self._agents = {agent.name: agent for agent in (agents or [])}
+        self._edges = edges or []
+        self._nodes = nodes or {}
         self._checkpointer = checkpointer
         self._mode = mode
         self._graph: CompiledStateGraph | None = None
@@ -156,9 +175,7 @@ class Workflow:
             return agent.tools
         return []
 
-    def _build_conditional_edges(
-        self, workflow: StateGraph
-    ) -> dict[str, list[tuple[str, Condition]]]:
+    def _build_conditional_edges(self) -> dict[str, list[tuple[str, Condition]]]:
         """
         Agrupa edges condicionais por source node.
 
@@ -200,6 +217,10 @@ class Workflow:
         for name, agent in self._agents.items():
             workflow.add_node(name, self._create_agent_node(agent))
 
+        # Adiciona nós customizados (funções)
+        for name, func in self._nodes.items():
+            workflow.add_node(name, func)
+
         # Adiciona tool nodes se necessário
         # Detecta padrão "{agent_name}_tools" nas edges
         tool_nodes_added: set[str] = set()
@@ -216,7 +237,7 @@ class Workflow:
                             tool_nodes_added.add(target)
 
         # Agrupa edges condicionais
-        conditional_edges = self._build_conditional_edges(workflow)
+        conditional_edges = self._build_conditional_edges()
 
         # Adiciona edges
         for edge in self._edges:
