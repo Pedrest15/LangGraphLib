@@ -1,0 +1,48 @@
+[project]
+name = "langgraphlib"
+version = "0.1.0"
+description = "Biblioteca Python para abstração do LangGraph na criação de agentes de IA"
+readme = "README.md"
+authors = [
+    { name = "Pedro Andrade", email = "pedro.andrade@daimon.com.br" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "langgraph>=0.2",
+    "langchain-core>=0.3",
+    "pydantic>=2.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.15,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8",
+    "pytest>=8.0",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "SIM",    # flake8-simplify
+    "TCH",    # flake8-type-checking
+]
+ignore = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["langgraphlib"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
