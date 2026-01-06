@@ -1,5 +1,3 @@
-"""Gerenciamento de estado para agentes com suporte a campos dinâmicos."""
-
 from typing import Annotated, Any
 
 from langchain_core.messages import AnyMessage
@@ -41,7 +39,9 @@ def create_state(
         MyState = create_state(counter=(int, 0))
 
         # State sem messages
-        CustomState = create_state("CustomState", include_messages=False, data=(dict, {}))
+        CustomState = create_state(
+            "CustomState", include_messages=False, data=(dict, {})
+        )
 
         # State com tipo sem default
         TaskState = create_state(task_id=str, status=(str, "pending"))

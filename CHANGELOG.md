@@ -20,6 +20,22 @@
   - `add_messages()`: Reducer para concatenar mensagens
   - `MessagesState`: Estado pré-definido só com messages
 
+- **Módulo `model.py`**
+  - `get_model()`: Obtém modelo de chat no formato `"provider/modelo"`
+  - `get_embeddings()`: Obtém modelo de embeddings
+  - Suporte a múltiplos providers: OpenAI, Anthropic, Groq, Ollama, Cerebras, Google, Mistral, Cohere, Fireworks, Together
+  - Import dinâmico dos providers (só carrega quando usado)
+  - Erros amigáveis com instruções de instalação
+
+- **Módulo `agent.py`**
+  - `Agent`: Classe para execução de LLMs com state dinâmico
+    - `invoke()` / `ainvoke()`: Executa o agente com state fornecido
+    - `input_field` / `output_field`: Campos configuráveis do state
+    - Suporte a `prompt` via `ChatPromptTemplate`
+    - Suporte a `tools` via `bind_tools()`
+    - Retorna dict parcial para atualização do state (compatível com LangGraph)
+  - Não executa tools - apenas retorna resposta para o Workflow decidir
+
 - **Documentação**
   - `CLAUDE.md`: Instruções do projeto e convenções de código
 
@@ -30,6 +46,8 @@ LangGraphLib/
 ├── src/langgraphlib/
 │   ├── __init__.py
 │   ├── state.py          ✅ Implementado
+│   ├── model.py          ✅ Implementado
+│   ├── agent.py          ✅ Implementado
 │   └── py.typed
 ├── pyproject.toml
 ├── CLAUDE.md
@@ -39,8 +57,7 @@ LangGraphLib/
 
 ### Próximos passos
 
-- [ ] `agent.py` - Classes base de agentes
+- [ ] `workflow.py` - Orquestração de agentes com StateGraph
 - [ ] `tools.py` - Decorators e registro de tools
 - [ ] `memory.py` - Abstrações de Checkpointer e Store
 - [ ] `hierarchy.py` - Supervisor e times de agentes
-- [ ] `config.py` - Configurações e model providers
