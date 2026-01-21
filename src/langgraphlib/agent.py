@@ -151,6 +151,9 @@ class Agent:
         # Monta o modelo com prompt e tools
         self._model = self._build_model(model)
 
+        # Modelo separado para roteamento (quando tem tools + destinations)
+        self._router_model = self._build_router_model(model)
+
     def _get_field_type(self, field_name: str) -> type:
         """
         Extrai o tipo de um campo do state.
@@ -191,6 +194,10 @@ class Agent:
         O schema força o LLM a retornar outputs E destino em uma única chamada.
         Se state foi fornecido, usa os tipos reais dos campos.
 
+        Nota: 'messages' é excluído do schema porque é um tipo complexo
+        que não é suportado pelo OpenAI structured output. O campo 'messages'
+        será tratado separadamente convertendo a resposta para AIMessage.
+
         Args:
             destinations: Lista de nomes de nós válidos.
 
@@ -200,13 +207,27 @@ class Agent:
         # Cria tipo Literal com os destinos permitidos
         destination_type = Literal[tuple(destinations)]  # type: ignore[valid-type]
 
-        # Monta campos dinamicamente para cada output_field
+        # Monta campos dinamicamente para cada output_field (exceto messages)
         fields: dict[str, Any] = {}
+        has_messages_field = False
         for field_name in self._output_fields:
+            # Pula 'messages' - tipo complexo não suportado pelo structured output
+            # Será substituído por campo 'response' simples (string)
+            if field_name == "messages":
+                has_messages_field = True
+                continue
             field_type = self._get_field_type(field_name)
             fields[field_name] = (
                 field_type,
                 Field(description=f"Valor para o campo '{field_name}'."),
+            )
+
+        # Se messages está em output_fields, adiciona campo 'response' string
+        # que será convertido para [AIMessage(content=response)] no invoke()
+        if has_messages_field:
+            fields["response"] = (
+                str,
+                Field(description="Sua resposta ou explicação para o usuário."),
             )
 
         # Adiciona campo goto
@@ -215,7 +236,9 @@ class Agent:
             Field(description="O próximo nó para onde o fluxo deve ir."),
         )
 
-        return create_model("RouterSchema", **fields)
+        # Cria modelo com extra="forbid" para gerar additionalProperties=false
+        # (necessário para OpenAI structured output)
+        return create_model("RouterSchema", __config__={"extra": "forbid"}, **fields)
 
     def _create_output_schema(self) -> type[BaseModel]:
         """
@@ -235,7 +258,9 @@ class Agent:
                 Field(description=f"Valor para o campo '{field_name}'."),
             )
 
-        return create_model("OutputSchema", **fields)
+        # Cria modelo com extra="forbid" para gerar additionalProperties=false
+        # (necessário para OpenAI structured output)
+        return create_model("OutputSchema", __config__={"extra": "forbid"}, **fields)
 
     def _needs_structured_output(self) -> bool:
         """
@@ -272,7 +297,8 @@ class Agent:
             llm = llm.bind_tools(self._tools)
 
         # Structured output: prioridade router_schema > output_schema
-        # Tools têm prioridade - não pode usar structured output junto
+        # Se tem tools E destinations, o router será usado em segunda chamada
+        # (não pode misturar bind_tools com with_structured_output)
         if self._router_schema and not self._tools:
             llm = llm.with_structured_output(self._router_schema)
         elif self._output_schema and not self._tools:
@@ -291,6 +317,33 @@ class Agent:
             return prompt_template | llm
 
         return llm
+
+    def _build_router_model(self, llm: BaseChatModel) -> BaseChatModel | None:
+        """Constrói modelo separado para roteamento quando há tools + destinations."""
+        if not (self._tools and self._router_schema):
+            return None
+
+        # Modelo apenas com structured output (sem tools)
+        router_llm = llm.with_structured_output(self._router_schema)
+
+        # Prompt para decisão de roteamento inclui o prompt original do agente
+        # para que o router entenda o contexto e as regras de roteamento
+        base_context = self._prompt or ""
+        router_prompt = (
+            f"{base_context}\n\n"
+            "Baseado na conversa abaixo, decida qual deve ser o próximo passo.\n"
+            "Analise o contexto e escolha o destino apropriado.\n"
+            "IMPORTANTE: Se você já chamou uma tool e ela foi executada (você vê o "
+            "resultado na conversa), NÃO chame a mesma tool novamente. Prossiga para "
+            "o próximo destino apropriado."
+        )
+
+        messages: list[Any] = [SystemMessagePromptTemplate.from_template(router_prompt)]
+        for field_name in self._input_fields:
+            messages.append(MessagesPlaceholder(variable_name=field_name))
+
+        prompt_template = ChatPromptTemplate.from_messages(messages)
+        return prompt_template | router_llm
 
     @property
     def name(self) -> str:
@@ -375,7 +428,7 @@ class Agent:
         input_data = self._prepare_input(state)
         response = self._model.invoke(input_data)
 
-        # Caso 1: destinations (router schema) - response é dict/BaseModel
+        # Caso 1: destinations (router schema) sem tools - response é dict/BaseModel
         if self._destinations and self._router_schema and not self._tools:
             # Extrai goto
             if isinstance(response, dict):
@@ -386,11 +439,21 @@ class Agent:
             # Extrai cada output field
             state_update: dict[str, Any] = {}
             for field_name in self._output_fields:
-                if isinstance(response, dict):
-                    value = response.get(field_name, "")
+                # 'messages' não está no schema - usa campo 'response' convertido
+                if field_name == "messages":
+                    if isinstance(response, dict):
+                        resp_text = response.get("response", "")
+                    else:
+                        resp_text = getattr(response, "response", "")
+                    state_update["messages"] = [AIMessage(content=resp_text)]
                 else:
-                    value = getattr(response, field_name, "")
-                state_update[field_name] = self._process_output_value(field_name, value)
+                    if isinstance(response, dict):
+                        value = response.get(field_name, "")
+                    else:
+                        value = getattr(response, field_name, "")
+                    state_update[field_name] = self._process_output_value(
+                        field_name, value
+                    )
 
             return Command(goto=self._resolve_goto(goto), update=state_update)
 
@@ -405,7 +468,7 @@ class Agent:
                 state_update[field_name] = self._process_output_value(field_name, value)
             return state_update
 
-        # Caso 3: tools ou padrão - response é AIMessage
+        # Caso 3: tools - response é AIMessage
         # Primeiro output field recebe a resposta
         primary_field = self._output_fields[0]
         output_value = [response] if primary_field == "messages" else response.content
@@ -417,6 +480,24 @@ class Agent:
                 goto=f"{self._name}_tools",
                 update=state_update,
             )
+
+        # Caso 4: tools + destinations - segunda chamada para decidir roteamento
+        if self._router_model and self._destinations:
+            # Atualiza input_data com a resposta atual para o router decidir
+            router_input = self._prepare_input(state)
+            # Adiciona a resposta do agente ao contexto
+            if primary_field == "messages":
+                router_input["messages"] = router_input.get("messages", []) + [response]
+
+            router_response = self._router_model.invoke(router_input)
+
+            # Extrai goto
+            if isinstance(router_response, dict):
+                goto = router_response.get("goto", self._destinations[0])
+            else:
+                goto = getattr(router_response, "goto", self._destinations[0])
+
+            return Command(goto=self._resolve_goto(goto), update=state_update)
 
         # Caso padrão: retorna dict para atualizar state
         return state_update
@@ -436,7 +517,7 @@ class Agent:
         input_data = self._prepare_input(state)
         response = await self._model.ainvoke(input_data)
 
-        # Caso 1: destinations (router schema) - response é dict/BaseModel
+        # Caso 1: destinations (router schema) sem tools - response é dict/BaseModel
         if self._destinations and self._router_schema and not self._tools:
             # Extrai goto
             if isinstance(response, dict):
@@ -447,11 +528,21 @@ class Agent:
             # Extrai cada output field
             state_update: dict[str, Any] = {}
             for field_name in self._output_fields:
-                if isinstance(response, dict):
-                    value = response.get(field_name, "")
+                # 'messages' não está no schema - usa campo 'response' convertido
+                if field_name == "messages":
+                    if isinstance(response, dict):
+                        resp_text = response.get("response", "")
+                    else:
+                        resp_text = getattr(response, "response", "")
+                    state_update["messages"] = [AIMessage(content=resp_text)]
                 else:
-                    value = getattr(response, field_name, "")
-                state_update[field_name] = self._process_output_value(field_name, value)
+                    if isinstance(response, dict):
+                        value = response.get(field_name, "")
+                    else:
+                        value = getattr(response, field_name, "")
+                    state_update[field_name] = self._process_output_value(
+                        field_name, value
+                    )
 
             return Command(goto=self._resolve_goto(goto), update=state_update)
 
@@ -466,7 +557,7 @@ class Agent:
                 state_update[field_name] = self._process_output_value(field_name, value)
             return state_update
 
-        # Caso 3: tools ou padrão - response é AIMessage
+        # Caso 3: tools - response é AIMessage
         # Primeiro output field recebe a resposta
         primary_field = self._output_fields[0]
         output_value = [response] if primary_field == "messages" else response.content
@@ -478,6 +569,24 @@ class Agent:
                 goto=f"{self._name}_tools",
                 update=state_update,
             )
+
+        # Caso 4: tools + destinations - segunda chamada para decidir roteamento
+        if self._router_model and self._destinations:
+            # Atualiza input_data com a resposta atual para o router decidir
+            router_input = self._prepare_input(state)
+            # Adiciona a resposta do agente ao contexto
+            if primary_field == "messages":
+                router_input["messages"] = router_input.get("messages", []) + [response]
+
+            router_response = await self._router_model.ainvoke(router_input)
+
+            # Extrai goto
+            if isinstance(router_response, dict):
+                goto = router_response.get("goto", self._destinations[0])
+            else:
+                goto = getattr(router_response, "goto", self._destinations[0])
+
+            return Command(goto=self._resolve_goto(goto), update=state_update)
 
         # Caso padrão: retorna dict para atualizar state
         return state_update

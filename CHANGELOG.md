@@ -4,6 +4,30 @@
 
 ### Adicionado
 
+- **Módulo `memory.py` - Memória de longo prazo**
+  - `MemoryManager`: Gerenciador sync de memória com API simplificada
+  - `AsyncMemoryManager`: Versão assíncrona
+  - Métodos: `save()`, `get()`, `search()`, `list()`, `delete()`
+  - Suporte a namespaces por `user_id` e `application`
+  - Busca semântica (quando store tem embeddings)
+
+- **Tools de Memória**
+  - `create_remember_tool()`: Tool para salvar memórias (sync)
+  - `create_recall_tool()`: Tool para buscar memórias (sync)
+  - `create_memory_tools()`: Cria ambas (atalho)
+  - `create_async_remember_tool()`: Versão async
+  - `create_async_recall_tool()`: Versão async
+  - `create_async_memory_tools()`: Versão async
+
+- **Nós de Memória para Workflow**
+  - `create_memory_saver_node()`: Extrai e salva memórias automaticamente via LLM
+  - `create_memory_retriever_node()`: Busca memórias e injeta no state
+  - `create_async_memory_saver_node()`: Versão async
+  - `create_async_memory_retriever_node()`: Versão async
+
+- **Exports públicos em `__init__.py`**
+  - Todos os componentes principais agora exportados
+
 - **Carregamento automático de variáveis de ambiente**
   - `python-dotenv>=1.0` como dependência
   - `load_dotenv()` automático em `model.py`
@@ -107,9 +131,12 @@ LangGraphLib/
 │   ├── agent.py          ✅ Implementado
 │   ├── workflow.py       ✅ Implementado
 │   ├── edge.py           ✅ Implementado
+│   ├── memory.py         ✅ Implementado
 │   └── py.typed
 ├── tests/
 │   └── test_scenarios.py ✅ 5 cenários
+├── docs/
+│   └── MEMORY_PLAN.md    📋 Plano de memória
 ├── pyproject.toml
 ├── CLAUDE.md
 ├── CHANGELOG.md
@@ -119,7 +146,5 @@ LangGraphLib/
 ### Próximos passos
 
 - [ ] `tools.py` - Decorators e registro de tools
-- [ ] `memory.py` - Abstrações de Checkpointer e Store
 - [ ] `hierarchy.py` - Supervisor e times de agentes
-- [ ] Atualizar `__init__.py` com exports públicos
-- [ ] Testes unitários
+- [ ] Testes unitários para memory.py

@@ -7,7 +7,6 @@ from typing import Any, Literal
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel
 
 from langgraphlib.agent import Agent
@@ -44,11 +43,16 @@ class Workflow:
         graph = workflow.compile()
         result = graph.invoke({"messages": [HumanMessage("Oi")]})
 
-        # Workflow com tools (edge condicional automática)
-        agent_tools = Agent(model=model, name="agent", tools=[search])
+        # Workflow com tools (usando classe Tool)
+        from langgraphlib.tool import Tool
+
+        agent_with_tools = Agent(model=model, name="agent", tools=[search])
+        agent_tools = Tool(name="agent_tools", tools=[search])
+
         workflow = Workflow(
             state=State,
-            agents=[agent_tools],
+            agents=[agent_with_tools],
+            nodes={"agent_tools": agent_tools},
             edges=[
                 ("start", "agent"),
                 ("agent", "agent_tools", "has_tool_calls"),
@@ -58,12 +62,18 @@ class Workflow:
         )
 
         # Múltiplos agentes com tools diferentes
-        # Use "{agent_name}_tools" para cada um
         coder = Agent(model=model, name="coder", tools=[run_code])
         searcher = Agent(model=model, name="searcher", tools=[web_search])
+        coder_tools = Tool(name="coder_tools", tools=[run_code])
+        searcher_tools = Tool(name="searcher_tools", tools=[web_search])
+
         workflow = Workflow(
             state=State,
             agents=[coder, searcher],
+            nodes={
+                "coder_tools": coder_tools,
+                "searcher_tools": searcher_tools,
+            },
             edges=[
                 ("start", "coder"),
                 ("coder", "coder_tools", "has_tool_calls"),
@@ -168,13 +178,6 @@ class Workflow:
         last_message = messages[-1]
         return bool(getattr(last_message, "tool_calls", None))
 
-    def _get_tools_for_agent(self, agent_name: str) -> list[Callable]:
-        """Retorna tools de um agente."""
-        agent = self._agents.get(agent_name)
-        if agent:
-            return agent.tools
-        return []
-
     def _build_conditional_edges(self) -> dict[str, list[tuple[str, Condition]]]:
         """
         Agrupa edges condicionais por source node.
@@ -217,24 +220,9 @@ class Workflow:
         for name, agent in self._agents.items():
             workflow.add_node(name, self._create_agent_node(agent))
 
-        # Adiciona nós customizados (funções)
+        # Adiciona nós customizados (funções ou Tool)
         for name, func in self._nodes.items():
             workflow.add_node(name, func)
-
-        # Adiciona tool nodes se necessário
-        # Detecta padrão "{agent_name}_tools" nas edges
-        tool_nodes_added: set[str] = set()
-        for edge in self._edges:
-            if len(edge) >= 2:
-                target = edge[1]
-                # Verifica se target termina com "_tools"
-                if target.endswith("_tools"):
-                    agent_name = target[:-6]  # Remove "_tools"
-                    if agent_name in self._agents and target not in tool_nodes_added:
-                        tools = self._get_tools_for_agent(agent_name)
-                        if tools:
-                            workflow.add_node(target, ToolNode(tools))
-                            tool_nodes_added.add(target)
 
         # Agrupa edges condicionais
         conditional_edges = self._build_conditional_edges()

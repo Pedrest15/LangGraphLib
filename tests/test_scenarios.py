@@ -6,6 +6,7 @@ from langchain_core.tools import tool
 from langgraphlib.agent import Agent
 from langgraphlib.model import get_model
 from langgraphlib.state import MessagesState, create_state
+from langgraphlib.tool import Tool
 from langgraphlib.workflow import Workflow
 
 # Modelo padrão para os testes
@@ -80,6 +81,8 @@ def test_scenario_2_calculator_agent():
     Agente com tools de calculadora (add, sub, mult, div).
     State: apenas messages.
     """
+    calc_tools = [add, sub, mult, div]
+
     calculator_agent = Agent(
         model=MODEL,
         name="calculator",
@@ -87,12 +90,16 @@ def test_scenario_2_calculator_agent():
             "Você é uma calculadora. Use as ferramentas disponíveis para "
             "realizar cálculos. Sempre use a ferramenta apropriada."
         ),
-        tools=[add, sub, mult, div],
+        tools=calc_tools,
     )
+
+    # Tool para as ferramentas de cálculo
+    calculator_tools = Tool(name="calculator_tools", tools=calc_tools)
 
     workflow = Workflow(
         state=MessagesState,
         agents=[calculator_agent],
+        nodes={"calculator_tools": calculator_tools},
         edges=[
             ("start", "calculator"),
             ("calculator", "calculator_tools", "has_tool_calls"),
