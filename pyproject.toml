@@ -5,10 +5,20 @@ build-backend = "hatchling.build"
 [project]
 name = "langgraphlib"
 version = "0.1.0"
-description = "Biblioteca Python para abstração do LangGraph na criação de agentes de IA"
+description = "Python library for LangGraph abstraction in AI agent creation"
 readme = "README.md"
+license = { text = "MIT" }
 authors = [
     { name = "Pedro Andrade", email = "pedro.andrade@daimon.com.br" }
+]
+keywords = ["langgraph", "langchain", "ai", "agents", "llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 requires-python = ">=3.13"
 dependencies = [
