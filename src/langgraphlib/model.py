@@ -1,44 +1,42 @@
-"""Interface simplificada para obter modelos de LLM e embeddings."""
-
 from typing import Any
 
 from dotenv import load_dotenv
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 
-# Carrega variáveis de ambiente do .env
+# Load environment variables from .env
 load_dotenv()
 
 
 class ModelError(Exception):
-    """Erro ao criar ou configurar modelo."""
+    """Error when creating or configuring model."""
 
     pass
 
 
 class ProviderNotInstalledError(ModelError):
-    """Dependências do provider não estão instaladas."""
+    """Provider dependencies are not installed."""
 
     pass
 
 
 def _parse_model_string(model_string: str) -> tuple[str, str]:
     """
-    Parseia string no formato 'provider/model_name'.
+    Parses string in 'provider/model_name' format.
 
     Args:
-        model_string: String como "openai/gpt-4o" ou "anthropic/claude-3-sonnet"
+        model_string: String like "openai/gpt-4o" or "anthropic/claude-3-sonnet"
 
     Returns:
-        Tupla (provider, model_name)
+        Tuple (provider, model_name)
 
     Raises:
-        ModelError: Se formato inválido
+        ModelError: If format is invalid
     """
     if "/" not in model_string:
         raise ModelError(
-            f"Formato inválido: '{model_string}'. "
-            "Use 'provider/modelo' (ex: 'openai/gpt-4o')"
+            f"Invalid format: '{model_string}'. "
+            "Use 'provider/model' (e.g.: 'openai/gpt-4o')"
         )
 
     parts = model_string.split("/", 1)
@@ -47,10 +45,10 @@ def _parse_model_string(model_string: str) -> tuple[str, str]:
 
 def _get_provider_class(provider: str) -> tuple[type, dict[str, Any]]:
     """
-    Importa dinamicamente a classe do provider.
+    Dynamically imports the provider class.
 
     Returns:
-        Tupla (classe_do_modelo, kwargs_extras)
+        Tuple (model_class, extra_kwargs)
     """
     providers: dict[str, tuple[str, str, dict[str, Any]]] = {
         "openai": ("langchain_openai", "ChatOpenAI", {}),
@@ -72,7 +70,7 @@ def _get_provider_class(provider: str) -> tuple[type, dict[str, Any]]:
     if provider not in providers:
         available = list(providers.keys())
         raise ModelError(
-            f"Provider '{provider}' não suportado. Disponíveis: {available}"
+            f"Provider '{provider}' not supported. Available: {available}"
         )
 
     module_name, class_name, default_kwargs = providers[provider]
@@ -82,16 +80,16 @@ def _get_provider_class(provider: str) -> tuple[type, dict[str, Any]]:
         return getattr(module, class_name), default_kwargs
     except ImportError as e:
         raise ProviderNotInstalledError(
-            f"Provider '{provider}' requer instalação: pip install {module_name}"
+            f"Provider '{provider}' requires installation: pip install {module_name}"
         ) from e
 
 
 def _get_embedding_class(provider: str) -> tuple[type, dict[str, Any]]:
     """
-    Importa dinamicamente a classe de embedding do provider.
+    Dynamically imports the embedding class for the provider.
 
     Returns:
-        Tupla (classe_do_embedding, kwargs_extras)
+        Tuple (embedding_class, extra_kwargs)
     """
     providers: dict[str, tuple[str, str, dict[str, Any]]] = {
         "openai": ("langchain_openai", "OpenAIEmbeddings", {}),
@@ -109,8 +107,8 @@ def _get_embedding_class(provider: str) -> tuple[type, dict[str, Any]]:
     if provider not in providers:
         available = list(providers.keys())
         raise ModelError(
-            f"Provider de embedding '{provider}' não suportado. "
-            f"Disponíveis: {available}"
+            f"Embedding provider '{provider}' not supported. "
+            f"Available: {available}"
         )
 
     module_name, class_name, default_kwargs = providers[provider]
@@ -120,7 +118,7 @@ def _get_embedding_class(provider: str) -> tuple[type, dict[str, Any]]:
         return getattr(module, class_name), default_kwargs
     except ImportError as e:
         raise ProviderNotInstalledError(
-            f"Provider '{provider}' requer instalação: pip install {module_name}"
+            f"Provider '{provider}' requires installation: pip install {module_name}"
         ) from e
 
 
@@ -134,36 +132,36 @@ def get_model(
     **kwargs: Any,
 ) -> BaseChatModel:
     """
-    Obtém um modelo de chat configurado.
+    Gets a configured chat model.
 
     Args:
-        model: String no formato "provider/modelo" (ex: "openai/gpt-4o")
-        api_key: API key do provider (usa env var se não fornecida)
-        temperature: Temperatura para geração (0-2)
-        max_tokens: Limite de tokens na resposta
-        streaming: Habilitar streaming
-        **kwargs: Parâmetros extras passados ao modelo LangChain
+        model: String in "provider/model" format (e.g.: "openai/gpt-4o")
+        api_key: Provider API key (uses env var if not provided)
+        temperature: Temperature for generation (0-2)
+        max_tokens: Token limit in response
+        streaming: Enable streaming
+        **kwargs: Extra parameters passed to the LangChain model
 
     Returns:
-        Instância do modelo pronta para uso
+        Model instance ready for use
 
     Examples:
         # OpenAI
         model = get_model("openai/gpt-4o", temperature=0.7)
 
-        # Anthropic com API key explícita
+        # Anthropic with explicit API key
         model = get_model("anthropic/claude-3-sonnet", api_key="sk-...")
 
-        # Ollama local
+        # Local Ollama
         model = get_model("ollama/llama3")
 
-        # Com streaming
+        # With streaming
         model = get_model("openai/gpt-4o-mini", streaming=True)
     """
     provider, model_name = _parse_model_string(model)
     model_class, default_kwargs = _get_provider_class(provider)
 
-    # Monta kwargs do modelo
+    # Build model kwargs
     model_kwargs = {
         **default_kwargs,
         "model": model_name,
@@ -172,9 +170,9 @@ def get_model(
         **kwargs,
     }
 
-    # Adiciona api_key se fornecida
+    # Add api_key if provided
     if api_key:
-        # Diferentes providers usam nomes diferentes para api_key
+        # Different providers use different names for api_key
         api_key_names = {
             "openai": "api_key",
             "anthropic": "api_key",
@@ -189,7 +187,7 @@ def get_model(
         key_name = api_key_names.get(provider, "api_key")
         model_kwargs[key_name] = api_key
 
-    # Adiciona max_tokens se especificado
+    # Add max_tokens if specified
     if max_tokens:
         model_kwargs["max_tokens"] = max_tokens
 
@@ -203,37 +201,37 @@ def get_embeddings(
     **kwargs: Any,
 ) -> Embeddings:
     """
-    Obtém um modelo de embeddings configurado.
+    Gets a configured embeddings model.
 
     Args:
-        model: String no formato "provider/modelo" (ex: "openai/text-embedding-3-small")
-        api_key: API key do provider (usa env var se não fornecida)
-        **kwargs: Parâmetros extras passados ao modelo LangChain
+        model: String in "provider/model" format (e.g.: "openai/text-embedding-3-small")
+        api_key: Provider API key (uses env var if not provided)
+        **kwargs: Extra parameters passed to the LangChain model
 
     Returns:
-        Instância do modelo de embeddings pronta para uso
+        Embeddings model instance ready for use
 
     Examples:
         # OpenAI
         embeddings = get_embeddings("openai/text-embedding-3-small")
 
-        # Ollama local
+        # Local Ollama
         embeddings = get_embeddings("ollama/nomic-embed-text")
 
-        # HuggingFace local
+        # Local HuggingFace
         embeddings = get_embeddings("huggingface/all-MiniLM-L6-v2")
     """
     provider, model_name = _parse_model_string(model)
     embedding_class, default_kwargs = _get_embedding_class(provider)
 
-    # Monta kwargs
+    # Build kwargs
     model_kwargs = {
         **default_kwargs,
         "model": model_name,
         **kwargs,
     }
 
-    # Adiciona api_key se fornecida
+    # Add api_key if provided
     if api_key:
         api_key_names = {
             "openai": "api_key",
@@ -249,10 +247,10 @@ def get_embeddings(
 
 def list_providers() -> dict[str, list[str]]:
     """
-    Lista providers disponíveis.
+    Lists available providers.
 
     Returns:
-        Dicionário com providers de chat e embedding
+        Dictionary with chat and embedding providers
     """
     return {
         "chat": [

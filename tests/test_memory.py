@@ -5,17 +5,18 @@ from langchain_core.tools import tool
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.store.memory import InMemoryStore
 
-from langgraphlib.agent import Agent
-from langgraphlib.memory import (
+from langgraphlib import (
+    Agent,
     MemoryManager,
+    MessagesState,
+    Tool,
+    Workflow,
     create_memory_retriever_node,
     create_memory_saver_node,
     create_memory_tools,
+    create_state,
+    get_model,
 )
-from langgraphlib.model import get_model
-from langgraphlib.state import MessagesState, create_state
-from langgraphlib.tool import Tool
-from langgraphlib.workflow import Workflow
 
 # Modelo padrão para os testes
 MODEL = get_model("openai/gpt-4o-mini")

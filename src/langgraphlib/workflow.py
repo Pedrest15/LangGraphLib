@@ -1,5 +1,3 @@
-"""Workflow para orquestração de agentes com LangGraph."""
-
 import base64
 from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any, Literal
@@ -16,9 +14,9 @@ from langgraphlib.streaming import MessageStreamChunk
 
 class Workflow:
     """
-    Orquestra agentes em um grafo LangGraph.
+    Orchestrates agents in a LangGraph graph.
 
-    Simplifica a criação de grafos permitindo definir edges como tuplas de strings.
+    Simplifies graph creation by allowing edges to be defined as string tuples.
 
     Examples:
         from langgraphlib import Workflow, Agent, create_state
@@ -27,10 +25,10 @@ class Workflow:
         model = get_model("openai/gpt-4o")
         State = create_state()
 
-        researcher = Agent(model=model, name="researcher", prompt="Pesquise...")
-        writer = Agent(model=model, name="writer", prompt="Escreva...")
+        researcher = Agent(model=model, name="researcher", prompt="Research...")
+        writer = Agent(model=model, name="writer", prompt="Write...")
 
-        # Workflow sequencial
+        # Sequential workflow
         workflow = Workflow(
             state=State,
             agents=[researcher, writer],
@@ -42,9 +40,9 @@ class Workflow:
         )
 
         graph = workflow.compile()
-        result = graph.invoke({"messages": [HumanMessage("Oi")]})
+        result = graph.invoke({"messages": [HumanMessage("Hi")]})
 
-        # Workflow com tools (usando classe Tool)
+        # Workflow with tools (using Tool class)
         from langgraphlib.tool import Tool
 
         agent_with_tools = Agent(model=model, name="agent", tools=[search])
@@ -62,7 +60,7 @@ class Workflow:
             ],
         )
 
-        # Múltiplos agentes com tools diferentes
+        # Multiple agents with different tools
         coder = Agent(model=model, name="coder", tools=[run_code])
         searcher = Agent(model=model, name="searcher", tools=[web_search])
         coder_tools = Tool(name="coder_tools", tools=[run_code])
@@ -86,7 +84,7 @@ class Workflow:
             ],
         )
 
-        # Condição customizada com função
+        # Custom condition with function
         State = create_state(needs_review=(bool, False))
         workflow = Workflow(
             state=State,
@@ -99,7 +97,7 @@ class Workflow:
             ],
         )
 
-        # Nós customizados com funções (nodes)
+        # Custom nodes with functions
         def format_output(state: State) -> dict:
             return {"output": state.messages[-1].content.upper()}
 
@@ -114,8 +112,8 @@ class Workflow:
             ],
         )
 
-        # Subgraphs (Workflow aninhado)
-        # Um Workflow pode ser usado como nó de outro Workflow
+        # Subgraphs (nested Workflow)
+        # A Workflow can be used as a node of another Workflow
         sub_workflow = Workflow(
             state=State,
             agents=[researcher],
@@ -128,7 +126,7 @@ class Workflow:
         main_workflow = Workflow(
             state=State,
             agents=[writer],
-            nodes={"research": sub_workflow},  # Workflow como nó
+            nodes={"research": sub_workflow},  # Workflow as node
             edges=[
                 ("start", "research"),
                 ("research", "writer"),
@@ -136,35 +134,35 @@ class Workflow:
             ],
         )
 
-        # Execução paralela (fan-out e fan-in)
-        # Múltiplos agentes executam em paralelo e resultados são combinados
+        # Parallel execution (fan-out and fan-in)
+        # Multiple agents execute in parallel and results are combined
         from langgraphlib.state import create_state
         import operator
         from typing import Annotated
 
-        # State com reducer para combinar resultados paralelos
+        # State with reducer to combine parallel results
         ParallelState = create_state(
             results=(Annotated[list, operator.add], [])
         )
 
-        researcher = Agent(model=model, name="researcher", prompt="Pesquise...")
-        analyst = Agent(model=model, name="analyst", prompt="Analise...")
-        writer = Agent(model=model, name="writer", prompt="Escreva...")
+        researcher = Agent(model=model, name="researcher", prompt="Research...")
+        analyst = Agent(model=model, name="analyst", prompt="Analyze...")
+        writer = Agent(model=model, name="writer", prompt="Write...")
 
         workflow = Workflow(
             state=ParallelState,
             agents=[researcher, analyst, writer],
             edges=[
-                # Fan-out: start -> researcher E analyst (paralelo)
+                # Fan-out: start -> researcher AND analyst (parallel)
                 ("start", ["researcher", "analyst"]),
-                # Fan-in: ambos convergem para writer
+                # Fan-in: both converge to writer
                 ("researcher", "writer"),
                 ("analyst", "writer"),
                 ("writer", "end"),
             ],
         )
 
-        # Sintaxe alternativa sem lista (equivalente)
+        # Alternative syntax without list (equivalent)
         workflow = Workflow(
             state=ParallelState,
             agents=[researcher, analyst, writer],
@@ -177,43 +175,43 @@ class Workflow:
             ],
         )
 
-        # Map-Reduce com Send (fan-out dinâmico)
-        # Número de branches determinado em runtime baseado nos dados
+        # Map-Reduce with Send (dynamic fan-out)
+        # Number of branches determined at runtime based on data
         from langgraphlib import Send, create_state
         import operator
         from typing import Annotated
 
-        # State com lista de itens e resultados acumulados
+        # State with item list and accumulated results
         MapReduceState = create_state(
             items=(list[str], []),
             results=(Annotated[list[str], operator.add], [])
         )
 
-        # Função de distribuição: cria um Send para cada item
+        # Distribution function: creates a Send for each item
         def distribute_items(state) -> list[Send]:
             return [
                 Send("process_item", {"current_item": item, "results": []})
                 for item in state.items
             ]
 
-        # Nó que processa cada item individualmente
+        # Node that processes each item individually
         def process_item(state) -> dict:
             item = state.get("current_item", "")
-            return {"results": [f"Processado: {item}"]}
+            return {"results": [f"Processed: {item}"]}
 
         workflow = Workflow(
             state=MapReduceState,
             nodes={"process_item": process_item},
             edges=[
-                # Fan-out dinâmico: distribui para N instâncias de process_item
+                # Dynamic fan-out: distributes to N instances of process_item
                 ("start", distribute_items),
-                # Fan-in: todas as instâncias convergem para end
+                # Fan-in: all instances converge to end
                 ("process_item", "end"),
             ],
         )
 
-        # Exemplo com subgraph para processamento complexo
-        # Cada branch executa um subgraph completo em paralelo
+        # Example with subgraph for complex processing
+        # Each branch executes a complete subgraph in parallel
         scraper_subgraph = Workflow(
             state=ScrapingState,
             nodes={"scrape": scrape_site, "filter": filter_results},
@@ -234,8 +232,8 @@ class Workflow:
             state=MainState,
             nodes={"scraper": scraper_subgraph, "aggregate": aggregate_results},
             edges=[
-                ("start", distribute_sites),  # Distribui para N scrapers
-                ("scraper", "aggregate"),      # Todos convergem
+                ("start", distribute_sites),  # Distributes to N scrapers
+                ("scraper", "aggregate"),      # All converge
                 ("aggregate", "end"),
             ],
         )
@@ -251,24 +249,24 @@ class Workflow:
         mode: Literal["sync", "async"] = "sync",
     ) -> None:
         """
-        Inicializa o workflow.
+        Initialize the workflow.
 
         Args:
-            state: Classe do state (criada com create_state).
-            agents: Lista de agentes do workflow.
-            edges: Lista de edges como tuplas:
-                - (source, target): edge fixa
-                - (source, target, condition): edge condicional
-                  Conditions built-in: "has_tool_calls", "no_tool_calls"
-                  Condition customizada: função (state) -> bool
-                - (source, [target1, target2, ...]): fan-out estático (paralelo)
-                - (source, distribution_func): fan-out dinâmico (map-reduce)
+            state: State class (created with create_state).
+            agents: List of workflow agents.
+            edges: List of edges as tuples:
+                - (source, target): fixed edge
+                - (source, target, condition): conditional edge
+                  Built-in conditions: "has_tool_calls", "no_tool_calls"
+                  Custom condition: function (state) -> bool
+                - (source, [target1, target2, ...]): static fan-out (parallel)
+                - (source, distribution_func): dynamic fan-out (map-reduce)
                   distribution_func: (state) -> list[Send]
-            nodes: Dict de nós customizados {nome: nó}.
-                Pode ser função, Tool, ou outro Workflow (subgraph).
-                Funções devem receber state e retornar dict para update.
-            checkpointer: Checkpointer para persistência de estado.
-            mode: Modo de execução dos agentes ("sync" ou "async").
+            nodes: Dict of custom nodes {name: node}.
+                Can be function, Tool, or another Workflow (subgraph).
+                Functions must receive state and return dict for update.
+            checkpointer: Checkpointer for state persistence.
+            mode: Agent execution mode ("sync" or "async").
         """
         self._state = state
         self._agents = {agent.name: agent for agent in (agents or [])}
@@ -279,7 +277,7 @@ class Workflow:
         self._graph: CompiledStateGraph | None = None
 
     def _resolve_node_name(self, name: str) -> str | object:
-        """Converte 'start'/'end' para constantes do LangGraph."""
+        """Convert 'start'/'end' to LangGraph constants."""
         lower = name.lower()
         if lower == "start":
             return START
@@ -288,7 +286,7 @@ class Workflow:
         return name
 
     def _create_agent_node(self, agent: Agent) -> Callable:
-        """Cria função node para o agente (sync ou async baseado no mode)."""
+        """Create node function for agent (sync or async based on mode)."""
         if self._mode == "async":
 
             async def async_node(
@@ -304,7 +302,7 @@ class Workflow:
         return sync_node
 
     def _has_tool_calls(self, state: BaseModel) -> bool:
-        """Verifica se a última mensagem tem tool_calls."""
+        """Check if the last message has tool_calls."""
         messages = getattr(state, "messages", [])
         if not messages:
             return False
@@ -313,10 +311,10 @@ class Workflow:
 
     def _build_conditional_edges(self) -> dict[str, list[tuple[str, Condition]]]:
         """
-        Agrupa edges condicionais por source node.
+        Group conditional edges by source node.
 
         Returns:
-            Dict mapeando source -> lista de (target, condition)
+            Dict mapping source -> list of (target, condition)
         """
         conditional: dict[str, list[tuple[str, Condition]]] = {}
 
@@ -331,7 +329,7 @@ class Workflow:
         return conditional
 
     def _evaluate_condition(self, condition: Condition, state: BaseModel) -> bool:
-        """Avalia uma condição (string built-in ou callable)."""
+        """Evaluate a condition (built-in string or callable)."""
         if callable(condition):
             return condition(state)
         if condition == "has_tool_calls":
@@ -342,61 +340,61 @@ class Workflow:
 
     def compile(self) -> CompiledStateGraph:
         """
-        Compila o workflow em um grafo LangGraph.
+        Compile the workflow into a LangGraph graph.
 
         Returns:
-            Grafo compilado pronto para invoke/ainvoke.
+            Compiled graph ready for invoke/ainvoke.
         """
         workflow = StateGraph(self._state)
 
-        # Adiciona nodes dos agentes
+        # Add agent nodes
         for name, agent in self._agents.items():
             workflow.add_node(name, self._create_agent_node(agent))
 
-        # Adiciona nós customizados (funções, Tool, ou Workflow/subgraph)
+        # Add custom nodes (functions, Tool, or Workflow/subgraph)
         for name, node in self._nodes.items():
-            # Se for um Workflow, compila e usa como subgraph
+            # If it's a Workflow, compile and use as subgraph
             if isinstance(node, Workflow):
                 subgraph = node.compile()
                 workflow.add_node(name, subgraph)
             else:
                 workflow.add_node(name, node)
 
-        # Agrupa edges condicionais
+        # Group conditional edges
         conditional_edges = self._build_conditional_edges()
 
-        # Separa edges de distribuição (map-reduce) das outras
+        # Separate distribution edges (map-reduce) from others
         distribution_edges: list[tuple[str, DistributionFunc]] = []
 
-        # Adiciona edges
+        # Add edges
         for edge in self._edges:
             source = self._resolve_node_name(edge[0])
             target = edge[1]
 
-            # Edge condicional (3 elementos)
+            # Conditional edge (3 elements)
             if len(edge) == 3:
-                # Será tratada abaixo em bloco
+                # Will be handled below in block
                 continue
 
-            # Fan-out estático: (source, [target1, target2, ...])
+            # Static fan-out: (source, [target1, target2, ...])
             if isinstance(target, list):
                 for t in target:
                     resolved_target = self._resolve_node_name(t)
                     workflow.add_edge(source, resolved_target)
                 continue
 
-            # Fan-out dinâmico (map-reduce): (source, distribution_func)
+            # Dynamic fan-out (map-reduce): (source, distribution_func)
             if callable(target):
                 distribution_edges.append((source, target))
                 continue
 
-            # Edge fixa simples
+            # Simple fixed edge
             resolved_target = self._resolve_node_name(target)
             workflow.add_edge(source, resolved_target)
 
-        # Adiciona edges condicionais agrupadas
+        # Add grouped conditional edges
         for source, conditions in conditional_edges.items():
-            # Cria função de roteamento
+            # Create routing function
             def make_router(
                 conds: list[tuple[str, Condition]], wf: "Workflow"
             ) -> Callable:
@@ -404,12 +402,12 @@ class Workflow:
                     for target, condition in conds:
                         if wf._evaluate_condition(condition, state):
                             return wf._resolve_node_name(target)
-                    # Fallback para primeiro target
+                    # Fallback to first target
                     return wf._resolve_node_name(conds[0][0])
 
                 return router
 
-            # Cria mapping
+            # Create mapping
             mapping = {}
             for target, _ in conditions:
                 resolved = self._resolve_node_name(target)
@@ -419,40 +417,40 @@ class Workflow:
                 source, make_router(conditions, self), mapping
             )
 
-        # Adiciona edges de distribuição (map-reduce com Send)
+        # Add distribution edges (map-reduce with Send)
         for source, distribution_func in distribution_edges:
             workflow.add_conditional_edges(source, distribution_func)
 
-        # Compila
+        # Compile
         self._graph = workflow.compile(checkpointer=self._checkpointer)
         return self._graph
 
     def get_image(self, xray: bool = True) -> str:
         """
-        Retorna imagem do grafo em base64.
+        Return graph image as base64.
 
         Args:
-            xray: Se True, mostra detalhes internos dos nodes.
+            xray: If True, shows internal node details.
 
         Returns:
-            String base64 da imagem PNG.
+            Base64 string of PNG image.
 
         Raises:
-            ValueError: Se o grafo não foi compilado.
+            ValueError: If graph was not compiled.
         """
         if not self._graph:
-            raise ValueError("Grafo não compilado. Chame compile() primeiro.")
+            raise ValueError("Graph not compiled. Call compile() first.")
 
         img_data = self._graph.get_graph(xray=xray).draw_mermaid_png()
         return base64.b64encode(img_data).decode("utf-8")
 
     @property
     def graph(self) -> CompiledStateGraph | None:
-        """Retorna o grafo compilado ou None."""
+        """Return compiled graph or None."""
         return self._graph
 
     def __repr__(self) -> str:
-        """Representação do workflow."""
+        """Workflow representation."""
         agents = list(self._agents.keys())
         return f"Workflow(agents={agents}, edges={len(self._edges)})"
 
@@ -464,23 +462,23 @@ class Workflow:
         subgraphs: bool = False,
     ) -> Iterator[MessageStreamChunk]:
         """
-        Stream de tokens LLM durante execução do workflow.
+        Stream LLM tokens during workflow execution.
 
-        Usa stream_mode="messages" para capturar tokens individuais
-        do LLM à medida que são gerados.
+        Uses stream_mode="messages" to capture individual tokens
+        from the LLM as they are generated.
 
         Args:
-            input: Estado inicial do workflow.
-            config: Configuração opcional (thread_id, callbacks, etc).
-            subgraphs: Se True, inclui streams de subgraphs.
+            input: Initial workflow state.
+            config: Optional configuration (thread_id, callbacks, etc).
+            subgraphs: If True, includes streams from subgraphs.
 
         Yields:
-            Tuplas (AIMessageChunk, metadata) onde:
-            - AIMessageChunk: chunk parcial da resposta
-            - metadata: dict com info do node (langgraph_node, etc)
+            Tuples (AIMessageChunk, metadata) where:
+            - AIMessageChunk: partial response chunk
+            - metadata: dict with node info (langgraph_node, etc)
 
         Raises:
-            ValueError: Se o grafo não foi compilado.
+            ValueError: If graph was not compiled.
 
         Examples:
             workflow = Workflow(...)
@@ -490,7 +488,7 @@ class Workflow:
                 print(chunk.content, end="", flush=True)
         """
         if not self._graph:
-            raise ValueError("Grafo não compilado. Chame compile() primeiro.")
+            raise ValueError("Graph not compiled. Call compile() first.")
 
         yield from self._graph.stream(
             input,
@@ -507,23 +505,23 @@ class Workflow:
         subgraphs: bool = False,
     ) -> AsyncIterator[MessageStreamChunk]:
         """
-        Stream assíncrono de tokens LLM durante execução do workflow.
+        Async stream LLM tokens during workflow execution.
 
-        Usa stream_mode="messages" para capturar tokens individuais
-        do LLM à medida que são gerados.
+        Uses stream_mode="messages" to capture individual tokens
+        from the LLM as they are generated.
 
         Args:
-            input: Estado inicial do workflow.
-            config: Configuração opcional (thread_id, callbacks, etc).
-            subgraphs: Se True, inclui streams de subgraphs.
+            input: Initial workflow state.
+            config: Optional configuration (thread_id, callbacks, etc).
+            subgraphs: If True, includes streams from subgraphs.
 
         Yields:
-            Tuplas (AIMessageChunk, metadata) onde:
-            - AIMessageChunk: chunk parcial da resposta
-            - metadata: dict com info do node (langgraph_node, etc)
+            Tuples (AIMessageChunk, metadata) where:
+            - AIMessageChunk: partial response chunk
+            - metadata: dict with node info (langgraph_node, etc)
 
         Raises:
-            ValueError: Se o grafo não foi compilado.
+            ValueError: If graph was not compiled.
 
         Examples:
             workflow = Workflow(...)
@@ -533,7 +531,7 @@ class Workflow:
                 print(chunk.content, end="", flush=True)
         """
         if not self._graph:
-            raise ValueError("Grafo não compilado. Chame compile() primeiro.")
+            raise ValueError("Graph not compiled. Call compile() first.")
 
         async for item in self._graph.astream(
             input,

@@ -1,5 +1,3 @@
-"""Gerenciamento de memória de longo prazo para agentes."""
-
 from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
@@ -16,9 +14,9 @@ from pydantic import BaseModel
 
 class MemoryManager:
     """
-    Gerenciador de memória de longo prazo com API simplificada (sync).
+    Long-term memory manager with simplified API (sync).
 
-    Abstrai o uso de namespaces e operações do Store.
+    Abstracts the use of namespaces and Store operations.
 
     Examples:
         from langgraph.store.memory import InMemoryStore
@@ -27,19 +25,19 @@ class MemoryManager:
         store = InMemoryStore()
         memory = MemoryManager(store, user_id="user_123")
 
-        # Salvar
+        # Save
         memory.save("preferences", {"theme": "dark"})
 
-        # Buscar por chave
+        # Get by key
         prefs = memory.get("preferences")
 
-        # Busca semântica (se store tiver embeddings)
-        related = memory.search("preferências do usuário", limit=5)
+        # Semantic search (if store has embeddings)
+        related = memory.search("user preferences", limit=5)
 
-        # Listar todas
+        # List all
         all_memories = memory.list()
 
-        # Deletar
+        # Delete
         memory.delete("preferences")
     """
 
@@ -50,12 +48,12 @@ class MemoryManager:
         application: str = "default",
     ) -> None:
         """
-        Inicializa o MemoryManager.
+        Initializes the MemoryManager.
 
         Args:
-            store: Instância de BaseStore (InMemoryStore, PostgresStore, etc.)
-            user_id: ID do usuário (usado como namespace)
-            application: Contexto da aplicação (sub-namespace)
+            store: BaseStore instance (InMemoryStore, PostgresStore, etc.)
+            user_id: User ID (used as namespace)
+            application: Application context (sub-namespace)
         """
         self._store = store
         self._user_id = user_id
@@ -64,38 +62,38 @@ class MemoryManager:
 
     @property
     def namespace(self) -> tuple[str, str]:
-        """Retorna o namespace atual (user_id, application)."""
+        """Returns the current namespace (user_id, application)."""
         return self._namespace
 
     @property
     def user_id(self) -> str:
-        """Retorna o user_id."""
+        """Returns the user_id."""
         return self._user_id
 
     @property
     def store(self) -> BaseStore:
-        """Retorna o store subjacente."""
+        """Returns the underlying store."""
         return self._store
 
     def save(self, key: str, value: dict[str, Any]) -> None:
         """
-        Salva uma memória.
+        Saves a memory.
 
         Args:
-            key: Chave única para a memória
-            value: Dados a serem salvos (dict)
+            key: Unique key for the memory
+            value: Data to be saved (dict)
         """
         self._store.put(self._namespace, key, value)
 
     def get(self, key: str) -> dict[str, Any] | None:
         """
-        Recupera uma memória por chave.
+        Retrieves a memory by key.
 
         Args:
-            key: Chave da memória
+            key: Memory key
 
         Returns:
-            Dict com os dados ou None se não encontrado
+            Dict with the data or None if not found
         """
         item = self._store.get(self._namespace, key)
         return item.value if item else None
@@ -107,17 +105,17 @@ class MemoryManager:
         filter: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """
-        Busca semântica em memórias.
+        Semantic search in memories.
 
-        Requer que o store tenha sido configurado com embeddings.
+        Requires that the store was configured with embeddings.
 
         Args:
-            query: Texto para busca semântica
-            limit: Número máximo de resultados
-            filter: Filtros adicionais (opcional)
+            query: Text for semantic search
+            limit: Maximum number of results
+            filter: Additional filters (optional)
 
         Returns:
-            Lista de memórias encontradas
+            List of found memories
         """
         items = self._store.search(
             self._namespace,
@@ -129,37 +127,37 @@ class MemoryManager:
 
     def list(self, limit: int = 100) -> list[dict[str, Any]]:
         """
-        Lista todas as memórias do namespace.
+        Lists all memories in the namespace.
 
         Args:
-            limit: Número máximo de resultados
+            limit: Maximum number of results
 
         Returns:
-            Lista de dicts com {key, value}
+            List of dicts with {key, value}
         """
         items = self._store.search(self._namespace, limit=limit)
         return [{"key": item.key, "value": item.value} for item in items]
 
     def delete(self, key: str) -> None:
         """
-        Remove uma memória.
+        Removes a memory.
 
         Args:
-            key: Chave da memória a remover
+            key: Key of the memory to remove
         """
         self._store.delete(self._namespace, key)
 
 
 class AsyncMemoryManager:
     """
-    Versão assíncrona do MemoryManager.
+    Asynchronous version of MemoryManager.
 
     Examples:
         memory = AsyncMemoryManager(store, user_id="user_123")
 
         await memory.save("preferences", {"theme": "dark"})
         prefs = await memory.get("preferences")
-        results = await memory.search("preferências", limit=5)
+        results = await memory.search("preferences", limit=5)
     """
 
     def __init__(
@@ -169,12 +167,12 @@ class AsyncMemoryManager:
         application: str = "default",
     ) -> None:
         """
-        Inicializa o AsyncMemoryManager.
+        Initializes the AsyncMemoryManager.
 
         Args:
-            store: Instância de BaseStore
-            user_id: ID do usuário (usado como namespace)
-            application: Contexto da aplicação (sub-namespace)
+            store: BaseStore instance
+            user_id: User ID (used as namespace)
+            application: Application context (sub-namespace)
         """
         self._store = store
         self._user_id = user_id
@@ -183,25 +181,25 @@ class AsyncMemoryManager:
 
     @property
     def namespace(self) -> tuple[str, str]:
-        """Retorna o namespace atual (user_id, application)."""
+        """Returns the current namespace (user_id, application)."""
         return self._namespace
 
     @property
     def user_id(self) -> str:
-        """Retorna o user_id."""
+        """Returns the user_id."""
         return self._user_id
 
     @property
     def store(self) -> BaseStore:
-        """Retorna o store subjacente."""
+        """Returns the underlying store."""
         return self._store
 
     async def save(self, key: str, value: dict[str, Any]) -> None:
-        """Salva uma memória."""
+        """Saves a memory."""
         await self._store.aput(self._namespace, key, value)
 
     async def get(self, key: str) -> dict[str, Any] | None:
-        """Recupera uma memória por chave."""
+        """Retrieves a memory by key."""
         item = await self._store.aget(self._namespace, key)
         return item.value if item else None
 
@@ -211,7 +209,7 @@ class AsyncMemoryManager:
         limit: int = 10,
         filter: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
-        """Busca semântica em memórias."""
+        """Semantic search in memories."""
         items = await self._store.asearch(
             self._namespace,
             query=query,
@@ -221,29 +219,29 @@ class AsyncMemoryManager:
         return [item.value for item in items]
 
     async def list(self, limit: int = 100) -> list[dict[str, Any]]:
-        """Lista todas as memórias do namespace."""
+        """Lists all memories in the namespace."""
         items = await self._store.asearch(self._namespace, limit=limit)
         return [{"key": item.key, "value": item.value} for item in items]
 
     async def delete(self, key: str) -> None:
-        """Remove uma memória."""
+        """Removes a memory."""
         await self._store.adelete(self._namespace, key)
 
 
 # =============================================================================
-# Tools Síncronas
+# Synchronous Tools
 # =============================================================================
 
 
 def create_remember_tool(memory: MemoryManager) -> Callable:
     """
-    Cria uma tool para salvar memórias.
+    Creates a tool for saving memories.
 
     Args:
-        memory: Instância de MemoryManager
+        memory: MemoryManager instance
 
     Returns:
-        Tool 'remember' para usar com Agent
+        'remember' tool for use with Agent
 
     Example:
         memory = MemoryManager(store, user_id="user_123")
@@ -254,28 +252,28 @@ def create_remember_tool(memory: MemoryManager) -> Callable:
 
     @tool
     def remember(fact: str, category: str = "general") -> str:
-        """Salva uma informação importante sobre o usuário para lembrar depois.
+        """Saves important information about the user to remember later.
 
         Args:
-            fact: O fato ou informação a ser salvo
-            category: Categoria da informação (ex: preference, fact, context)
+            fact: The fact or information to be saved
+            category: Category of the information (e.g.: preference, fact, context)
         """
         key = f"{category}_{uuid4().hex[:8]}"
         memory.save(key, {"content": fact, "category": category})
-        return f"Memória salva: {fact}"
+        return f"Memory saved: {fact}"
 
     return remember
 
 
 def create_recall_tool(memory: MemoryManager) -> Callable:
     """
-    Cria uma tool para buscar memórias.
+    Creates a tool for searching memories.
 
     Args:
-        memory: Instância de MemoryManager
+        memory: MemoryManager instance
 
     Returns:
-        Tool 'recall' para usar com Agent
+        'recall' tool for use with Agent
 
     Example:
         memory = MemoryManager(store, user_id="user_123")
@@ -286,15 +284,15 @@ def create_recall_tool(memory: MemoryManager) -> Callable:
 
     @tool
     def recall(query: str, limit: int = 5) -> str:
-        """Busca informações salvas sobre o usuário.
+        """Searches saved information about the user.
 
         Args:
-            query: O que buscar nas memórias
-            limit: Número máximo de resultados
+            query: What to search in memories
+            limit: Maximum number of results
         """
         memories = memory.search(query, limit=limit)
         if not memories:
-            return "Nenhuma memória encontrada."
+            return "No memories found."
 
         results = []
         for mem in memories:
@@ -309,15 +307,15 @@ def create_recall_tool(memory: MemoryManager) -> Callable:
 
 def create_memory_tools(memory: MemoryManager) -> list[Callable]:
     """
-    Cria ambas as tools de memória (remember + recall).
+    Creates both memory tools (remember + recall).
 
-    Atalho para criar as duas tools de uma vez.
+    Shortcut to create both tools at once.
 
     Args:
-        memory: Instância de MemoryManager
+        memory: MemoryManager instance
 
     Returns:
-        Lista com [remember, recall]
+        List with [remember, recall]
 
     Example:
         memory = MemoryManager(store, user_id="user_123")
@@ -332,19 +330,19 @@ def create_memory_tools(memory: MemoryManager) -> list[Callable]:
 
 
 # =============================================================================
-# Tools Assíncronas
+# Asynchronous Tools
 # =============================================================================
 
 
 def create_async_remember_tool(memory: AsyncMemoryManager) -> Callable:
     """
-    Cria uma tool assíncrona para salvar memórias.
+    Creates an asynchronous tool for saving memories.
 
     Args:
-        memory: Instância de AsyncMemoryManager
+        memory: AsyncMemoryManager instance
 
     Returns:
-        Tool 'remember' assíncrona
+        Asynchronous 'remember' tool
 
     Example:
         memory = AsyncMemoryManager(store, user_id="user_123")
@@ -355,28 +353,28 @@ def create_async_remember_tool(memory: AsyncMemoryManager) -> Callable:
 
     @tool
     async def remember(fact: str, category: str = "general") -> str:
-        """Salva uma informação importante sobre o usuário para lembrar depois.
+        """Saves important information about the user to remember later.
 
         Args:
-            fact: O fato ou informação a ser salvo
-            category: Categoria da informação (ex: preference, fact, context)
+            fact: The fact or information to be saved
+            category: Category of the information (e.g.: preference, fact, context)
         """
         key = f"{category}_{uuid4().hex[:8]}"
         await memory.save(key, {"content": fact, "category": category})
-        return f"Memória salva: {fact}"
+        return f"Memory saved: {fact}"
 
     return remember
 
 
 def create_async_recall_tool(memory: AsyncMemoryManager) -> Callable:
     """
-    Cria uma tool assíncrona para buscar memórias.
+    Creates an asynchronous tool for searching memories.
 
     Args:
-        memory: Instância de AsyncMemoryManager
+        memory: AsyncMemoryManager instance
 
     Returns:
-        Tool 'recall' assíncrona
+        Asynchronous 'recall' tool
 
     Example:
         memory = AsyncMemoryManager(store, user_id="user_123")
@@ -387,15 +385,15 @@ def create_async_recall_tool(memory: AsyncMemoryManager) -> Callable:
 
     @tool
     async def recall(query: str, limit: int = 5) -> str:
-        """Busca informações salvas sobre o usuário.
+        """Searches saved information about the user.
 
         Args:
-            query: O que buscar nas memórias
-            limit: Número máximo de resultados
+            query: What to search in memories
+            limit: Maximum number of results
         """
         memories = await memory.search(query, limit=limit)
         if not memories:
-            return "Nenhuma memória encontrada."
+            return "No memories found."
 
         results = []
         for mem in memories:
@@ -410,13 +408,13 @@ def create_async_recall_tool(memory: AsyncMemoryManager) -> Callable:
 
 def create_async_memory_tools(memory: AsyncMemoryManager) -> list[Callable]:
     """
-    Cria ambas as tools assíncronas de memória (remember + recall).
+    Creates both asynchronous memory tools (remember + recall).
 
     Args:
-        memory: Instância de AsyncMemoryManager
+        memory: AsyncMemoryManager instance
 
     Returns:
-        Lista com [remember, recall] assíncronas
+        List with asynchronous [remember, recall]
     """
     return [
         create_async_remember_tool(memory),
@@ -425,7 +423,7 @@ def create_async_memory_tools(memory: AsyncMemoryManager) -> list[Callable]:
 
 
 # =============================================================================
-# Nós de Memória Síncronos
+# Synchronous Memory Nodes
 # =============================================================================
 
 
@@ -435,17 +433,17 @@ def create_memory_saver_node(
     extraction_prompt: str | None = None,
 ) -> Callable:
     """
-    Cria um nó que extrai e salva memórias automaticamente.
+    Creates a node that extracts and saves memories automatically.
 
-    O nó usa o LLM para analisar a conversa e extrair fatos relevantes.
+    The node uses the LLM to analyze the conversation and extract relevant facts.
 
     Args:
-        model: Modelo de chat para extração
-        memory: Instância de MemoryManager
-        extraction_prompt: Prompt customizado para extração (opcional)
+        model: Chat model for extraction
+        memory: MemoryManager instance
+        extraction_prompt: Custom extraction prompt (optional)
 
     Returns:
-        Função node para usar no Workflow
+        Node function for use in Workflow
 
     Example:
         memory_saver = create_memory_saver_node(model, memory)
@@ -463,34 +461,34 @@ def create_memory_saver_node(
     """
 
     class ExtractedMemories(BaseModel):
-        """Memórias extraídas da conversa."""
+        """Memories extracted from the conversation."""
 
         facts: list[str]
 
     default_prompt = (
-        "Analise a conversa e extraia fatos importantes sobre o usuário. "
-        "Fatos podem incluir: nome, preferências, profissão, interesses, "
-        "contexto relevante. Retorne apenas fatos novos e relevantes. "
-        "Se não houver fatos novos, retorne lista vazia."
+        "Analyze the conversation and extract important facts about the user. "
+        "Facts may include: name, preferences, profession, interests, "
+        "relevant context. Return only new and relevant facts. "
+        "If there are no new facts, return an empty list."
     )
 
     prompt = extraction_prompt or default_prompt
     extractor = model.with_structured_output(ExtractedMemories)
 
     def memory_saver_node(state: Any) -> dict:
-        """Extrai e salva memórias da conversa."""
+        """Extracts and saves memories from the conversation."""
         messages = getattr(state, "messages", [])
         if not messages:
             return {}
 
-        # Extrai fatos
+        # Extract facts
         extraction_messages = [
             {"role": "system", "content": prompt},
-            {"role": "user", "content": f"Conversa:\n{messages}"},
+            {"role": "user", "content": f"Conversation:\n{messages}"},
         ]
         result = extractor.invoke(extraction_messages)
 
-        # Salva cada fato
+        # Save each fact
         for fact in result.facts:
             key = f"fact_{uuid4().hex[:8]}"
             memory.save(key, {"content": fact, "source": "auto_extraction"})
@@ -507,19 +505,19 @@ def create_memory_retriever_node(
     limit: int = 5,
 ) -> Callable:
     """
-    Cria um nó que busca memórias e adiciona ao state como string formatada.
+    Creates a node that searches memories and adds to state as formatted string.
 
     Args:
-        memory: Instância de MemoryManager
-        query_field: Campo do state usado como query (default: messages)
-        output_field: Campo do state onde salvar o contexto (default: memory_context)
-        limit: Número máximo de memórias a buscar
+        memory: MemoryManager instance
+        query_field: State field used as query (default: messages)
+        output_field: State field to save context (default: memory_context)
+        limit: Maximum number of memories to retrieve
 
     Returns:
-        Função node para usar no Workflow
+        Node function for use in Workflow
 
     Example:
-        # State precisa ter o campo output_field como string
+        # State needs to have the output_field as string
         State = create_state(memory_context=(str, ""))
 
         memory_retriever = create_memory_retriever_node(memory, limit=5)
@@ -537,24 +535,24 @@ def create_memory_retriever_node(
     """
 
     def memory_retriever_node(state: Any) -> dict:
-        """Busca memórias relevantes e adiciona ao state."""
+        """Searches relevant memories and adds to state."""
         query_value = getattr(state, query_field, None)
         if not query_value:
             return {output_field: ""}
 
-        # Se for messages, usa última mensagem
+        # If messages, use last message
         if isinstance(query_value, list) and query_value:
             last_msg = query_value[-1]
             query = getattr(last_msg, "content", str(last_msg))
         else:
             query = str(query_value)
 
-        # Busca memórias
+        # Search memories
         memories = memory.search(query, limit=limit)
 
-        # Formata como string
+        # Format as string
         if not memories:
-            return {output_field: "Nenhuma memória encontrada."}
+            return {output_field: "No memories found."}
 
         formatted = []
         for mem in memories:
@@ -567,7 +565,7 @@ def create_memory_retriever_node(
 
 
 # =============================================================================
-# Nós de Memória Assíncronos
+# Asynchronous Memory Nodes
 # =============================================================================
 
 
@@ -577,46 +575,46 @@ def create_async_memory_saver_node(
     extraction_prompt: str | None = None,
 ) -> Callable:
     """
-    Cria um nó assíncrono que extrai e salva memórias automaticamente.
+    Creates an asynchronous node that extracts and saves memories automatically.
 
     Args:
-        model: Modelo de chat para extração
-        memory: Instância de AsyncMemoryManager
-        extraction_prompt: Prompt customizado para extração (opcional)
+        model: Chat model for extraction
+        memory: AsyncMemoryManager instance
+        extraction_prompt: Custom extraction prompt (optional)
 
     Returns:
-        Função node assíncrona para usar no Workflow
+        Asynchronous node function for use in Workflow
     """
 
     class ExtractedMemories(BaseModel):
-        """Memórias extraídas da conversa."""
+        """Memories extracted from the conversation."""
 
         facts: list[str]
 
     default_prompt = (
-        "Analise a conversa e extraia fatos importantes sobre o usuário. "
-        "Fatos podem incluir: nome, preferências, profissão, interesses, "
-        "contexto relevante. Retorne apenas fatos novos e relevantes. "
-        "Se não houver fatos novos, retorne lista vazia."
+        "Analyze the conversation and extract important facts about the user. "
+        "Facts may include: name, preferences, profession, interests, "
+        "relevant context. Return only new and relevant facts. "
+        "If there are no new facts, return an empty list."
     )
 
     prompt = extraction_prompt or default_prompt
     extractor = model.with_structured_output(ExtractedMemories)
 
     async def async_memory_saver_node(state: Any) -> dict:
-        """Extrai e salva memórias da conversa."""
+        """Extracts and saves memories from the conversation."""
         messages = getattr(state, "messages", [])
         if not messages:
             return {}
 
-        # Extrai fatos
+        # Extract facts
         extraction_messages = [
             {"role": "system", "content": prompt},
-            {"role": "user", "content": f"Conversa:\n{messages}"},
+            {"role": "user", "content": f"Conversation:\n{messages}"},
         ]
         result = await extractor.ainvoke(extraction_messages)
 
-        # Salva cada fato
+        # Save each fact
         for fact in result.facts:
             key = f"fact_{uuid4().hex[:8]}"
             await memory.save(key, {"content": fact, "source": "auto_extraction"})
@@ -633,37 +631,37 @@ def create_async_memory_retriever_node(
     limit: int = 5,
 ) -> Callable:
     """
-    Cria um nó assíncrono que busca memórias e adiciona ao state como string.
+    Creates an asynchronous node that searches memories and adds to state as string.
 
     Args:
-        memory: Instância de AsyncMemoryManager
-        query_field: Campo do state usado como query (default: messages)
-        output_field: Campo do state onde salvar o contexto (default: memory_context)
-        limit: Número máximo de memórias a buscar
+        memory: AsyncMemoryManager instance
+        query_field: State field used as query (default: messages)
+        output_field: State field to save context (default: memory_context)
+        limit: Maximum number of memories to retrieve
 
     Returns:
-        Função node assíncrona para usar no Workflow
+        Asynchronous node function for use in Workflow
     """
 
     async def async_memory_retriever_node(state: Any) -> dict:
-        """Busca memórias relevantes e adiciona ao state."""
+        """Searches relevant memories and adds to state."""
         query_value = getattr(state, query_field, None)
         if not query_value:
             return {output_field: ""}
 
-        # Se for messages, usa última mensagem
+        # If messages, use last message
         if isinstance(query_value, list) and query_value:
             last_msg = query_value[-1]
             query = getattr(last_msg, "content", str(last_msg))
         else:
             query = str(query_value)
 
-        # Busca memórias
+        # Search memories
         memories = await memory.search(query, limit=limit)
 
-        # Formata como string
+        # Format as string
         if not memories:
-            return {output_field: "Nenhuma memória encontrada."}
+            return {output_field: "No memories found."}
 
         formatted = []
         for mem in memories:

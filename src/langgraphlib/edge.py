@@ -1,25 +1,23 @@
-"""Tipos e aliases para edges do workflow."""
-
 from collections.abc import Callable
 
 from langgraph.types import Send
 from pydantic import BaseModel
 
-# Type alias para condições
-# - string built-in: "has_tool_calls", "no_tool_calls"
-# - função booleana: (state) -> bool
-# - função de distribuição (map-reduce): (state) -> list[Send]
+# Type alias for conditions
+# - built-in string: "has_tool_calls", "no_tool_calls"
+# - boolean function: (state) -> bool
+# - distribution function (map-reduce): (state) -> list[Send]
 Condition = str | Callable[[BaseModel], bool] | Callable[[BaseModel], list[Send]]
 
-# Type alias para função de distribuição (retorna lista de Send para map-reduce)
+# Type alias for distribution function (returns list of Send for map-reduce)
 DistributionFunc = Callable[[BaseModel], list[Send]]
 
-# Type alias para edges
-# Formatos suportados:
-# - (source, target): edge simples
-# - (source, target, condition): edge condicional
-# - (source, [target1, target2, ...]): fan-out estático (execução paralela)
-# - (source, distribution_func): fan-out dinâmico (map-reduce com Send)
+# Type alias for edges
+# Supported formats:
+# - (source, target): simple edge
+# - (source, target, condition): conditional edge
+# - (source, [target1, target2, ...]): static fan-out (parallel execution)
+# - (source, distribution_func): dynamic fan-out (map-reduce with Send)
 Edge = (
     tuple[str, str]
     | tuple[str, str, Condition]
@@ -27,5 +25,5 @@ Edge = (
     | tuple[str, DistributionFunc]
 )
 
-# Re-export Send para uso direto
+# Re-export Send for direct use
 __all__ = ["Condition", "DistributionFunc", "Edge", "Send"]

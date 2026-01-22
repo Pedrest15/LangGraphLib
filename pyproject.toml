@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "langgraphlib"
 version = "0.1.0"
@@ -15,10 +19,6 @@ dependencies = [
     "langchain-openai>=1.1.6",
     "python-dotenv>=1.0",
 ]
-
-[build-system]
-requires = ["uv_build>=0.9.15,<0.10.0"]
-build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
@@ -49,3 +49,6 @@ known-first-party = ["langgraphlib"]
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

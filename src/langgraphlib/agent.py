@@ -18,14 +18,14 @@ from pydantic import BaseModel, Field, create_model
 
 class Agent:
     """
-    Agente para execução de LLMs com state dinâmico.
+    Agent for LLM execution with dynamic state.
 
-    O Agent encapsula a configuração de um LLM e permite execução
-    com states customizados via invoke/ainvoke.
+    The Agent encapsulates LLM configuration and enables execution
+    with custom states via invoke/ainvoke.
 
-    Funcionalidades:
-        - tools: Bind de tools ao LLM, retorna Command para {name}_tools
-        - destinations: Roteamento dinâmico via structured output
+    Features:
+        - tools: Bind tools to the LLM, returns Command to {name}_tools
+        - destinations: Dynamic routing via structured output
 
     Examples:
         from langgraphlib.model import get_model
@@ -33,11 +33,11 @@ class Agent:
 
         model = get_model("openai/gpt-4o")
 
-        # Agente simples com messages
-        agent = Agent(model=model, prompt="Você é um assistente útil.")
-        result = agent.invoke(MessagesState(messages=[HumanMessage("Oi")]))
+        # Simple agent with messages
+        agent = Agent(model=model, prompt="You are a helpful assistant.")
+        result = agent.invoke(MessagesState(messages=[HumanMessage("Hi")]))
 
-        # Agente com campos customizados
+        # Agent with custom fields
         MyState = create_state(
             include_messages=False,
             query=(str, ""),
@@ -45,13 +45,13 @@ class Agent:
         )
         agent = Agent(
             model=model,
-            prompt="Responda a query do usuário.",
+            prompt="Answer the user's query.",
             input_fields="query",
             output_fields="response",
         )
-        result = agent.invoke(MyState(query="Qual a capital do Brasil?"))
+        result = agent.invoke(MyState(query="What is the capital of France?"))
 
-        # Agente com múltiplos campos de entrada/saída
+        # Agent with multiple input/output fields
         MultiState = create_state(
             include_messages=False,
             context=(str, ""),
@@ -61,23 +61,23 @@ class Agent:
         )
         agent = Agent(
             model=model,
-            prompt="Responda baseado no contexto.",
+            prompt="Answer based on the context.",
             input_fields=["context", "question"],
             output_fields=["answer", "confidence"],
         )
 
-        # Agente com roteamento dinâmico (destinations)
-        # O LLM decide para qual nó ir baseado no contexto
+        # Agent with dynamic routing (destinations)
+        # The LLM decides which node to go to based on context
         supervisor = Agent(
             model=model,
             name="supervisor",
-            prompt="Decida se deve pesquisar ou escrever.",
+            prompt="Decide whether to research or write.",
             destinations=["researcher", "writer", "end"],
         )
-        # invoke() retorna Command(goto="researcher"|"writer"|"end", update={...})
+        # invoke() returns Command(goto="researcher"|"writer"|"end", update={...})
 
-        # Agente com tipagem correta via state
-        # Se state é fornecido, os tipos dos output_fields são extraídos dele
+        # Agent with correct typing via state
+        # If state is provided, output_fields types are extracted from it
         CounterState = create_state(
             include_messages=False,
             query=(str, ""),
@@ -86,13 +86,13 @@ class Agent:
         )
         agent = Agent(
             model=model,
-            prompt="Responda e conte quantas palavras.",
-            state=CounterState,  # tipos extraídos: count=int, response=str
+            prompt="Answer and count the words.",
+            state=CounterState,  # types extracted: count=int, response=str
             input_fields="query",
             output_fields=["response", "count"],
             destinations=["next", "end"],
         )
-        # O LLM retornará count como int, não str
+        # The LLM will return count as int, not str
     """
 
     def __init__(
@@ -110,25 +110,25 @@ class Agent:
         timeout: float | None = None,
     ) -> None:
         """
-        Inicializa o agente.
+        Initialize the agent.
 
         Args:
-            model: Instância do modelo LangChain.
-            name: Nome do agente (gerado automaticamente se não fornecido).
-            prompt: Prompt de sistema para o LLM.
-            tools: Lista de ferramentas disponíveis para o agente.
-            destinations: Lista de nomes de nós para roteamento dinâmico.
-                Se fornecido, o agente usa structured output para decidir
-                o próximo nó e retorna Command ao invés de dict.
-            state: Classe do state para introspecção de tipos.
-                Se fornecido junto com destinations, os tipos dos output_fields
-                serão extraídos do state para garantir tipagem correta.
-            input_fields: Campo(s) do state para ler input. Pode ser string
-                ou lista de strings para múltiplos campos.
-            output_fields: Campo(s) do state para escrever output. Pode ser
-                string ou lista de strings para múltiplos campos.
-            max_retries: Número máximo de tentativas em caso de erro (default: 0).
-            timeout: Timeout em segundos para execução do modelo (default: None).
+            model: LangChain model instance.
+            name: Agent name (auto-generated if not provided).
+            prompt: System prompt for the LLM.
+            tools: List of tools available to the agent.
+            destinations: List of node names for dynamic routing.
+                If provided, the agent uses structured output to decide
+                the next node and returns Command instead of dict.
+            state: State class for type introspection.
+                If provided with destinations, output_fields types
+                are extracted from state to ensure correct typing.
+            input_fields: State field(s) to read input from. Can be string
+                or list of strings for multiple fields.
+            output_fields: State field(s) to write output to. Can be
+                string or list of strings for multiple fields.
+            max_retries: Maximum retry attempts on error (default: 0).
+            timeout: Timeout in seconds for model execution (default: None).
         """
         self._name = name or f"agent_{uuid4().hex[:8]}"
         self._prompt = prompt
@@ -138,7 +138,7 @@ class Agent:
         self._max_retries = max_retries
         self._timeout = timeout
 
-        # Normaliza para lista
+        # Normalize to list
         self._input_fields = (
             [input_fields] if isinstance(input_fields, str) else list(input_fields)
         )
@@ -146,39 +146,39 @@ class Agent:
             [output_fields] if isinstance(output_fields, str) else list(output_fields)
         )
 
-        # Cria schema de roteamento se destinations fornecido
+        # Create routing schema if destinations provided
         self._router_schema: type[BaseModel] | None = None
         if destinations:
             self._router_schema = self._create_router_schema(destinations)
 
-        # Cria schema de output se necessário (sem destinations)
+        # Create output schema if needed (without destinations)
         self._output_schema: type[BaseModel] | None = None
         if not destinations and self._needs_structured_output():
             self._output_schema = self._create_output_schema()
 
-        # Monta o modelo com prompt e tools
+        # Build model with prompt and tools
         self._model = self._build_model(model)
 
-        # Modelo separado para roteamento (quando tem tools + destinations)
+        # Separate model for routing (when has tools + destinations)
         self._router_model = self._build_router_model(model)
 
     def _get_field_type(self, field_name: str) -> type:
         """
-        Extrai o tipo de um campo do state.
+        Extract the type of a state field.
 
-        Lida com tipos Annotated (ex: Annotated[list[Message], add_messages])
-        extraindo o tipo base.
+        Handles Annotated types (e.g., Annotated[list[Message], add_messages])
+        by extracting the base type.
 
         Args:
-            field_name: Nome do campo no state.
+            field_name: Field name in the state.
 
         Returns:
-            Tipo do campo ou str como fallback.
+            Field type or str as fallback.
         """
         if not self._state_class:
             return str
 
-        # Obtém field_info do modelo Pydantic
+        # Get field_info from Pydantic model
         field_info = self._state_class.model_fields.get(field_name)
         if not field_info:
             return str
@@ -187,7 +187,7 @@ class Agent:
         if field_type is None:
             return str
 
-        # Se é Annotated, extrai o tipo base (primeiro argumento)
+        # If Annotated, extract base type (first argument)
         if get_origin(field_type) is Annotated:
             args = get_args(field_type)
             if args:
@@ -197,124 +197,124 @@ class Agent:
 
     def _create_router_schema(self, destinations: list[str]) -> type[BaseModel]:
         """
-        Cria schema Pydantic dinâmico para roteamento.
+        Create dynamic Pydantic schema for routing.
 
-        O schema força o LLM a retornar outputs E destino em uma única chamada.
-        Se state foi fornecido, usa os tipos reais dos campos.
+        The schema forces the LLM to return outputs AND destination in a single call.
+        If state was provided, uses actual field types.
 
-        Nota: 'messages' é excluído do schema porque é um tipo complexo
-        que não é suportado pelo OpenAI structured output. O campo 'messages'
-        será tratado separadamente convertendo a resposta para AIMessage.
+        Note: 'messages' is excluded from schema because it's a complex type
+        not supported by OpenAI structured output. The 'messages' field
+        will be handled separately by converting the response to AIMessage.
 
         Args:
-            destinations: Lista de nomes de nós válidos.
+            destinations: List of valid node names.
 
         Returns:
-            Classe Pydantic com campos de output e 'goto'.
+            Pydantic class with output fields and 'goto'.
         """
-        # Cria tipo Literal com os destinos permitidos
+        # Create Literal type with allowed destinations
         destination_type = Literal[tuple(destinations)]  # type: ignore[valid-type]
 
-        # Monta campos dinamicamente para cada output_field (exceto messages)
+        # Build fields dynamically for each output_field (except messages)
         fields: dict[str, Any] = {}
         has_messages_field = False
         for field_name in self._output_fields:
-            # Pula 'messages' - tipo complexo não suportado pelo structured output
-            # Será substituído por campo 'response' simples (string)
+            # Skip 'messages' - complex type not supported by structured output
+            # Will be replaced by simple 'response' string field
             if field_name == "messages":
                 has_messages_field = True
                 continue
             field_type = self._get_field_type(field_name)
             fields[field_name] = (
                 field_type,
-                Field(description=f"Valor para o campo '{field_name}'."),
+                Field(description=f"Value for field '{field_name}'."),
             )
 
-        # Se messages está em output_fields, adiciona campo 'response' string
-        # que será convertido para [AIMessage(content=response)] no invoke()
+        # If messages is in output_fields, add 'response' string field
+        # which will be converted to [AIMessage(content=response)] in invoke()
         if has_messages_field:
             fields["response"] = (
                 str,
-                Field(description="Sua resposta ou explicação para o usuário."),
+                Field(description="Your response or explanation for the user."),
             )
 
-        # Adiciona campo goto
+        # Add goto field
         fields["goto"] = (
             destination_type,
-            Field(description="O próximo nó para onde o fluxo deve ir."),
+            Field(description="The next node the flow should go to."),
         )
 
-        # Cria modelo com extra="forbid" para gerar additionalProperties=false
-        # (necessário para OpenAI structured output)
+        # Create model with extra="forbid" to generate additionalProperties=false
+        # (required for OpenAI structured output)
         return create_model("RouterSchema", __config__={"extra": "forbid"}, **fields)
 
     def _create_output_schema(self) -> type[BaseModel]:
         """
-        Cria schema Pydantic para structured output sem roteamento.
+        Create Pydantic schema for structured output without routing.
 
-        Usado quando há múltiplos output_fields ou tipos não-string,
-        forçando o LLM a respeitar os tipos corretos.
+        Used when there are multiple output_fields or non-string types,
+        forcing the LLM to respect correct types.
 
         Returns:
-            Classe Pydantic com campos de output tipados.
+            Pydantic class with typed output fields.
         """
         fields: dict[str, Any] = {}
         for field_name in self._output_fields:
             field_type = self._get_field_type(field_name)
             fields[field_name] = (
                 field_type,
-                Field(description=f"Valor para o campo '{field_name}'."),
+                Field(description=f"Value for field '{field_name}'."),
             )
 
-        # Cria modelo com extra="forbid" para gerar additionalProperties=false
-        # (necessário para OpenAI structured output)
+        # Create model with extra="forbid" to generate additionalProperties=false
+        # (required for OpenAI structured output)
         return create_model("OutputSchema", __config__={"extra": "forbid"}, **fields)
 
     def _needs_structured_output(self) -> bool:
         """
-        Determina se structured output deve ser usado (sem destinations).
+        Determine if structured output should be used (without destinations).
 
-        Condições:
-        - state foi fornecido
-        - Pelo menos um output_field tem tipo diferente de str
-        - OU há múltiplos output_fields
+        Conditions:
+        - state was provided
+        - At least one output_field has a type other than str
+        - OR there are multiple output_fields
 
         Returns:
-            True se structured output deve ser aplicado.
+            True if structured output should be applied.
         """
         if not self._state_class:
             return False
 
-        # Se há múltiplos output_fields, precisa de structured output
+        # If multiple output_fields, need structured output
         if len(self._output_fields) > 1:
             return True
 
-        # Se o único campo tem tipo diferente de str, precisa de structured output
+        # If single field has type other than str, need structured output
         if len(self._output_fields) == 1:
             field_type = self._get_field_type(self._output_fields[0])
-            # Ignora 'messages' pois é tratado especialmente
+            # Ignore 'messages' as it's handled specially
             if self._output_fields[0] != "messages" and field_type is not str:
                 return True
 
         return False
 
     def _build_model(self, llm: BaseChatModel) -> BaseChatModel:
-        """Constrói modelo com prompt template, tools e/ou structured output."""
-        # Bind tools se fornecidas
+        """Build model with prompt template, tools and/or structured output."""
+        # Bind tools if provided
         if self._tools:
             llm = llm.bind_tools(self._tools)
 
-        # Structured output: prioridade router_schema > output_schema
-        # Se tem tools E destinations, o router será usado em segunda chamada
-        # (não pode misturar bind_tools com with_structured_output)
+        # Structured output: priority router_schema > output_schema
+        # If has tools AND destinations, router will be used in second call
+        # (cannot mix bind_tools with with_structured_output)
         if self._router_schema and not self._tools:
             llm = llm.with_structured_output(self._router_schema)
         elif self._output_schema and not self._tools:
             llm = llm.with_structured_output(self._output_schema)
 
-        # Aplica prompt template se fornecido
+        # Apply prompt template if provided
         if self._prompt:
-            # Monta lista de mensagens com placeholders para cada input field
+            # Build message list with placeholders for each input field
             messages: list[Any] = [
                 SystemMessagePromptTemplate.from_template(self._prompt)
             ]
@@ -327,23 +327,23 @@ class Agent:
         return llm
 
     def _build_router_model(self, llm: BaseChatModel) -> BaseChatModel | None:
-        """Constrói modelo separado para roteamento quando há tools + destinations."""
+        """Build separate model for routing when has tools + destinations."""
         if not (self._tools and self._router_schema):
             return None
 
-        # Modelo apenas com structured output (sem tools)
+        # Model with structured output only (no tools)
         router_llm = llm.with_structured_output(self._router_schema)
 
-        # Prompt para decisão de roteamento inclui o prompt original do agente
-        # para que o router entenda o contexto e as regras de roteamento
+        # Routing prompt includes original agent prompt
+        # so the router understands context and routing rules
         base_context = self._prompt or ""
         router_prompt = (
             f"{base_context}\n\n"
-            "Baseado na conversa abaixo, decida qual deve ser o próximo passo.\n"
-            "Analise o contexto e escolha o destino apropriado.\n"
-            "IMPORTANTE: Se você já chamou uma tool e ela foi executada (você vê o "
-            "resultado na conversa), NÃO chame a mesma tool novamente. Prossiga para "
-            "o próximo destino apropriado."
+            "Based on the conversation below, decide what the next step should be.\n"
+            "Analyze the context and choose the appropriate destination.\n"
+            "IMPORTANT: If you already called a tool and it was executed (you see the "
+            "result in the conversation), DO NOT call the same tool again. Proceed to "
+            "the appropriate next destination."
         )
 
         messages: list[Any] = [SystemMessagePromptTemplate.from_template(router_prompt)]
@@ -355,67 +355,67 @@ class Agent:
 
     @property
     def name(self) -> str:
-        """Nome do agente."""
+        """Agent name."""
         return self._name
 
     @property
     def model(self) -> BaseChatModel:
-        """Modelo LLM do agente."""
+        """Agent's LLM model."""
         return self._model
 
     @property
     def prompt(self) -> str | None:
-        """Prompt de sistema."""
+        """System prompt."""
         return self._prompt
 
     @property
     def tools(self) -> list[Callable[..., Any]]:
-        """Lista de ferramentas do agente."""
+        """Agent's tool list."""
         return self._tools
 
     @property
     def input_fields(self) -> list[str]:
-        """Campos do state para input."""
+        """State fields for input."""
         return self._input_fields
 
     @property
     def output_fields(self) -> list[str]:
-        """Campos do state para output."""
+        """State fields for output."""
         return self._output_fields
 
     @property
     def destinations(self) -> list[str] | None:
-        """Lista de destinos para roteamento dinâmico."""
+        """List of destinations for dynamic routing."""
         return self._destinations
 
     @property
     def max_retries(self) -> int:
-        """Número máximo de tentativas."""
+        """Maximum retry attempts."""
         return self._max_retries
 
     @property
     def timeout(self) -> float | None:
-        """Timeout em segundos."""
+        """Timeout in seconds."""
         return self._timeout
 
     def _resolve_goto(self, goto: str) -> str | object:
-        """Converte 'end' para constante END do LangGraph."""
+        """Convert 'end' to LangGraph END constant."""
         if goto.lower() == "end":
             return END
         return goto
 
     def _prepare_input(self, state: BaseModel | dict[str, Any]) -> dict[str, Any]:
-        """Prepara input para o modelo a partir do state."""
+        """Prepare input for the model from state."""
         input_data: dict[str, Any] = {}
 
         for field_name in self._input_fields:
-            # Suporta tanto BaseModel quanto dict (usado por Send)
+            # Support both BaseModel and dict (used by Send)
             if isinstance(state, dict):
                 input_value = state.get(field_name)
             else:
                 input_value = getattr(state, field_name)
 
-            # Converte string para lista de HumanMessage
+            # Convert string to HumanMessage list
             if isinstance(input_value, str):
                 input_value = [HumanMessage(content=input_value)]
 
@@ -425,11 +425,11 @@ class Agent:
 
     def _process_output_value(self, field_name: str, value: Any) -> Any:
         """
-        Processa valor de output para garantir tipo correto.
+        Process output value to ensure correct type.
 
-        Se o campo é 'messages' e o valor é string, converte para lista de AIMessage.
-        Isso é necessário porque structured output retorna strings, mas o reducer
-        add_messages espera lista de mensagens.
+        If field is 'messages' and value is string, converts to AIMessage list.
+        This is needed because structured output returns strings, but the
+        add_messages reducer expects a list of messages.
         """
         if field_name == "messages" and isinstance(value, str):
             return [AIMessage(content=value)]
@@ -437,18 +437,18 @@ class Agent:
 
     def _invoke_with_retry(self, model: Any, input_data: dict[str, Any]) -> Any:
         """
-        Executa o modelo com retry e timeout.
+        Execute model with retry and timeout.
 
         Args:
-            model: Modelo a ser invocado.
-            input_data: Dados de entrada.
+            model: Model to invoke.
+            input_data: Input data.
 
         Returns:
-            Resposta do modelo.
+            Model response.
 
         Raises:
-            TimeoutError: Se timeout for atingido.
-            Exception: Última exceção após esgotar retries.
+            TimeoutError: If timeout is reached.
+            Exception: Last exception after exhausting retries.
         """
         last_exception: Exception | None = None
 
@@ -460,8 +460,8 @@ class Agent:
                     elapsed = time.time() - start_time
                     if elapsed > self._timeout:
                         raise TimeoutError(
-                            f"Timeout de {self._timeout}s atingido "
-                            f"(tempo: {elapsed:.2f}s)"
+                            f"Timeout of {self._timeout}s reached "
+                            f"(elapsed: {elapsed:.2f}s)"
                         )
                     return response
                 else:
@@ -471,7 +471,7 @@ class Agent:
             except Exception as e:
                 last_exception = e
                 if attempt < self._max_retries:
-                    # Aguarda antes de retry (backoff exponencial)
+                    # Wait before retry (exponential backoff)
                     time.sleep(2**attempt * 0.5)
                     continue
                 raise
@@ -481,18 +481,18 @@ class Agent:
 
     async def _ainvoke_with_retry(self, model: Any, input_data: dict[str, Any]) -> Any:
         """
-        Executa o modelo de forma assíncrona com retry e timeout.
+        Execute model asynchronously with retry and timeout.
 
         Args:
-            model: Modelo a ser invocado.
-            input_data: Dados de entrada.
+            model: Model to invoke.
+            input_data: Input data.
 
         Returns:
-            Resposta do modelo.
+            Model response.
 
         Raises:
-            TimeoutError: Se timeout for atingido.
-            Exception: Última exceção após esgotar retries.
+            TimeoutError: If timeout is reached.
+            Exception: Last exception after exhausting retries.
         """
         last_exception: Exception | None = None
 
@@ -511,7 +511,7 @@ class Agent:
             except Exception as e:
                 last_exception = e
                 if attempt < self._max_retries:
-                    # Aguarda antes de retry (backoff exponencial)
+                    # Wait before retry (exponential backoff)
                     await asyncio.sleep(2**attempt * 0.5)
                     continue
                 raise
@@ -521,35 +521,35 @@ class Agent:
 
     def invoke(self, state: BaseModel | dict[str, Any]) -> dict[str, Any] | Command:
         """
-        Executa o agente com o state fornecido.
+        Execute the agent with the provided state.
 
         Args:
-            state: Instância do state ou dict com os dados de entrada.
+            state: State instance or dict with input data.
 
         Returns:
-            - Se destinations configurado: Command com goto e update do state.
-            - Se tem tool_calls: Command para {agent_name}_tools.
-            - Caso contrário: Dict parcial para atualizar o state.
+            - If destinations configured: Command with goto and state update.
+            - If has tool_calls: Command to {agent_name}_tools.
+            - Otherwise: Partial dict to update state.
 
         Raises:
-            TimeoutError: Se timeout for atingido.
-            Exception: Se todas as tentativas falharem.
+            TimeoutError: If timeout is reached.
+            Exception: If all attempts fail.
         """
         input_data = self._prepare_input(state)
         response = self._invoke_with_retry(self._model, input_data)
 
-        # Caso 1: destinations (router schema) sem tools - response é dict/BaseModel
+        # Case 1: destinations (router schema) without tools - response is dict/BaseModel
         if self._destinations and self._router_schema and not self._tools:
-            # Extrai goto
+            # Extract goto
             if isinstance(response, dict):
                 goto = response.get("goto", self._destinations[0])
             else:
                 goto = getattr(response, "goto", self._destinations[0])
 
-            # Extrai cada output field
+            # Extract each output field
             state_update: dict[str, Any] = {}
             for field_name in self._output_fields:
-                # 'messages' não está no schema - usa campo 'response' convertido
+                # 'messages' not in schema - use converted 'response' field
                 if field_name == "messages":
                     if isinstance(response, dict):
                         resp_text = response.get("response", "")
@@ -567,7 +567,7 @@ class Agent:
 
             return Command(goto=self._resolve_goto(goto), update=state_update)
 
-        # Caso 2: output schema (sem destinations) - response é dict/BaseModel
+        # Case 2: output schema (without destinations) - response is dict/BaseModel
         if self._output_schema and not self._tools:
             state_update: dict[str, Any] = {}
             for field_name in self._output_fields:
@@ -578,30 +578,30 @@ class Agent:
                 state_update[field_name] = self._process_output_value(field_name, value)
             return state_update
 
-        # Caso 3: tools - response é AIMessage
-        # Primeiro output field recebe a resposta
+        # Case 3: tools - response is AIMessage
+        # First output field receives the response
         primary_field = self._output_fields[0]
         output_value = [response] if primary_field == "messages" else response.content
         state_update = {primary_field: output_value}
 
-        # tool_calls - vai para tool node
+        # tool_calls - go to tool node
         if hasattr(response, "tool_calls") and response.tool_calls:
             return Command(
                 goto=f"{self._name}_tools",
                 update=state_update,
             )
 
-        # Caso 4: tools + destinations - segunda chamada para decidir roteamento
+        # Case 4: tools + destinations - second call to decide routing
         if self._router_model and self._destinations:
-            # Atualiza input_data com a resposta atual para o router decidir
+            # Update input_data with current response for router to decide
             router_input = self._prepare_input(state)
-            # Adiciona a resposta do agente ao contexto
+            # Add agent response to context
             if primary_field == "messages":
                 router_input["messages"] = router_input.get("messages", []) + [response]
 
             router_response = self._invoke_with_retry(self._router_model, router_input)
 
-            # Extrai goto
+            # Extract goto
             if isinstance(router_response, dict):
                 goto = router_response.get("goto", self._destinations[0])
             else:
@@ -609,42 +609,42 @@ class Agent:
 
             return Command(goto=self._resolve_goto(goto), update=state_update)
 
-        # Caso padrão: retorna dict para atualizar state
+        # Default case: return dict to update state
         return state_update
 
     async def ainvoke(
         self, state: BaseModel | dict[str, Any]
     ) -> dict[str, Any] | Command:
         """
-        Executa o agente de forma assíncrona.
+        Execute the agent asynchronously.
 
         Args:
-            state: Instância do state ou dict com os dados de entrada.
+            state: State instance or dict with input data.
 
         Returns:
-            - Se destinations configurado: Command com goto e update do state.
-            - Se tem tool_calls: Command para {agent_name}_tools.
-            - Caso contrário: Dict parcial para atualizar o state.
+            - If destinations configured: Command with goto and state update.
+            - If has tool_calls: Command to {agent_name}_tools.
+            - Otherwise: Partial dict to update state.
 
         Raises:
-            TimeoutError: Se timeout for atingido.
-            Exception: Se todas as tentativas falharem.
+            TimeoutError: If timeout is reached.
+            Exception: If all attempts fail.
         """
         input_data = self._prepare_input(state)
         response = await self._ainvoke_with_retry(self._model, input_data)
 
-        # Caso 1: destinations (router schema) sem tools - response é dict/BaseModel
+        # Case 1: destinations (router schema) without tools - response is dict/BaseModel
         if self._destinations and self._router_schema and not self._tools:
-            # Extrai goto
+            # Extract goto
             if isinstance(response, dict):
                 goto = response.get("goto", self._destinations[0])
             else:
                 goto = getattr(response, "goto", self._destinations[0])
 
-            # Extrai cada output field
+            # Extract each output field
             state_update: dict[str, Any] = {}
             for field_name in self._output_fields:
-                # 'messages' não está no schema - usa campo 'response' convertido
+                # 'messages' not in schema - use converted 'response' field
                 if field_name == "messages":
                     if isinstance(response, dict):
                         resp_text = response.get("response", "")
@@ -662,7 +662,7 @@ class Agent:
 
             return Command(goto=self._resolve_goto(goto), update=state_update)
 
-        # Caso 2: output schema (sem destinations) - response é dict/BaseModel
+        # Case 2: output schema (without destinations) - response is dict/BaseModel
         if self._output_schema and not self._tools:
             state_update: dict[str, Any] = {}
             for field_name in self._output_fields:
@@ -673,24 +673,24 @@ class Agent:
                 state_update[field_name] = self._process_output_value(field_name, value)
             return state_update
 
-        # Caso 3: tools - response é AIMessage
-        # Primeiro output field recebe a resposta
+        # Case 3: tools - response is AIMessage
+        # First output field receives the response
         primary_field = self._output_fields[0]
         output_value = [response] if primary_field == "messages" else response.content
         state_update = {primary_field: output_value}
 
-        # tool_calls - vai para tool node
+        # tool_calls - go to tool node
         if hasattr(response, "tool_calls") and response.tool_calls:
             return Command(
                 goto=f"{self._name}_tools",
                 update=state_update,
             )
 
-        # Caso 4: tools + destinations - segunda chamada para decidir roteamento
+        # Case 4: tools + destinations - second call to decide routing
         if self._router_model and self._destinations:
-            # Atualiza input_data com a resposta atual para o router decidir
+            # Update input_data with current response for router to decide
             router_input = self._prepare_input(state)
-            # Adiciona a resposta do agente ao contexto
+            # Add agent response to context
             if primary_field == "messages":
                 router_input["messages"] = router_input.get("messages", []) + [response]
 
@@ -698,7 +698,7 @@ class Agent:
                 self._router_model, router_input
             )
 
-            # Extrai goto
+            # Extract goto
             if isinstance(router_response, dict):
                 goto = router_response.get("goto", self._destinations[0])
             else:
@@ -706,11 +706,11 @@ class Agent:
 
             return Command(goto=self._resolve_goto(goto), update=state_update)
 
-        # Caso padrão: retorna dict para atualizar state
+        # Default case: return dict to update state
         return state_update
 
     def __repr__(self) -> str:
-        """Representação do agente."""
+        """Agent representation."""
         return (
             f"Agent(name={self._name!r}, "
             f"input_fields={self._input_fields!r}, "

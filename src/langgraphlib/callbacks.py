@@ -1,5 +1,3 @@
-"""Callbacks para logging e trace de workflows."""
-
 import json
 import logging
 from datetime import datetime
@@ -9,7 +7,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 
 
 def _get_keys(obj: Any) -> list[str]:
-    """Extrai keys de um objeto de forma segura."""
+    """Safely extracts keys from an object."""
     if obj is None:
         return []
     if isinstance(obj, dict):
@@ -23,24 +21,24 @@ def _get_keys(obj: Any) -> list[str]:
 
 def _get_name(serialized: dict[str, Any] | None, **kwargs: Any) -> str:
     """
-    Extrai nome do nó de forma segura.
+    Safely extracts node name.
 
-    Tenta múltiplas fontes:
-    1. kwargs["name"] - nome direto passado pelo LangGraph
-    2. kwargs["tags"] - tags podem conter nome do nó (ex: "graph:step:1")
-    3. serialized["name"] - nome serializado do LangChain
-    4. serialized["id"][-1] - último elemento do ID
+    Tries multiple sources:
+    1. kwargs["name"] - direct name passed by LangGraph
+    2. kwargs["tags"] - tags may contain node name (e.g., "graph:step:1")
+    3. serialized["name"] - LangChain serialized name
+    4. serialized["id"][-1] - last element of ID
     """
-    # 1. Nome direto nos kwargs
+    # 1. Direct name in kwargs
     if kwargs.get("name"):
         return kwargs["name"]
 
-    # 2. Tags - LangGraph coloca info útil aqui
+    # 2. Tags - LangGraph puts useful info here
     tags = kwargs.get("tags", [])
     for tag in tags:
-        # Tags do LangGraph podem ter formato "graph:step:N" ou ser nome do nó
+        # LangGraph tags may have format "graph:step:N" or be node name
         if isinstance(tag, str) and not tag.startswith("seq:"):
-            # Ignora tags sequenciais genéricas
+            # Ignore generic sequential tags
             if ":" not in tag:
                 return tag
 
@@ -48,7 +46,7 @@ def _get_name(serialized: dict[str, Any] | None, **kwargs: Any) -> str:
     if serialized and isinstance(serialized, dict) and serialized.get("name"):
         return serialized["name"]
 
-    # 4. Último elemento do ID (fallback)
+    # 4. Last element of ID (fallback)
     if (
         serialized
         and isinstance(serialized, dict)
@@ -62,22 +60,22 @@ def _get_name(serialized: dict[str, Any] | None, **kwargs: Any) -> str:
 
 class LoggingHandler(BaseCallbackHandler):
     """
-    Handler para logging de execução do grafo.
+    Handler for graph execution logging.
 
-    Loga início/fim de cada chain/node com informações úteis.
+    Logs start/end of each chain/node with useful information.
 
     Examples:
         from langgraphlib.callbacks import LoggingHandler
 
         graph = workflow.compile()
         result = graph.invoke(
-            {"messages": [HumanMessage("Oi")]},
+            {"messages": [HumanMessage("Hi")]},
             config={"callbacks": [LoggingHandler()]}
         )
 
-        # Com nível DEBUG para mais detalhes
+        # With DEBUG level for more details
         result = graph.invoke(
-            {"messages": [HumanMessage("Oi")]},
+            {"messages": [HumanMessage("Hi")]},
             config={"callbacks": [LoggingHandler(level=logging.DEBUG)]}
         )
     """
@@ -88,11 +86,11 @@ class LoggingHandler(BaseCallbackHandler):
         level: int = logging.INFO,
     ) -> None:
         """
-        Inicializa o handler.
+        Initializes the handler.
 
         Args:
-            logger: Logger customizado. Se None, usa logger padrão.
-            level: Nível de logging (default: INFO).
+            logger: Custom logger. If None, uses default logger.
+            level: Logging level (default: INFO).
         """
         self._logger = logger or logging.getLogger("langgraphlib")
         self._level = level
@@ -104,7 +102,7 @@ class LoggingHandler(BaseCallbackHandler):
         inputs: dict[str, Any],
         **kwargs: Any,
     ) -> None:
-        """Chamado quando uma chain/node inicia."""
+        """Called when a chain/node starts."""
         name = _get_name(serialized, **kwargs)
         run_id = kwargs.get("run_id", "")
         self._start_times[str(run_id)] = datetime.now()
@@ -119,7 +117,7 @@ class LoggingHandler(BaseCallbackHandler):
         outputs: Any,
         **kwargs: Any,
     ) -> None:
-        """Chamado quando uma chain/node termina."""
+        """Called when a chain/node finishes."""
         run_id = str(kwargs.get("run_id", ""))
         start_time = self._start_times.pop(run_id, None)
 
@@ -139,15 +137,15 @@ class LoggingHandler(BaseCallbackHandler):
         error: BaseException,
         **kwargs: Any,
     ) -> None:
-        """Chamado quando uma chain/node falha."""
+        """Called when a chain/node fails."""
         self._logger.error(f"[ERROR] {type(error).__name__}: {error}")
 
 
 class TraceHandler(BaseCallbackHandler):
     """
-    Handler que coleta trace estruturado da execução.
+    Handler that collects structured execution trace.
 
-    Armazena histórico de execução para análise posterior.
+    Stores execution history for later analysis.
 
     Examples:
         from langgraphlib.callbacks import TraceHandler
@@ -155,32 +153,32 @@ class TraceHandler(BaseCallbackHandler):
         tracer = TraceHandler()
         graph = workflow.compile()
         result = graph.invoke(
-            {"messages": [HumanMessage("Oi")]},
+            {"messages": [HumanMessage("Hi")]},
             config={"callbacks": [tracer]}
         )
 
-        # Acessar trace após execução
+        # Access trace after execution
         print(tracer.traces)
         print(tracer.to_json())
     """
 
     def __init__(self) -> None:
-        """Inicializa o handler."""
+        """Initializes the handler."""
         self._traces: list[dict[str, Any]] = []
         self._start_times: dict[str, datetime] = {}
 
     @property
     def traces(self) -> list[dict[str, Any]]:
-        """Lista de traces coletados."""
+        """List of collected traces."""
         return self._traces
 
     def clear(self) -> None:
-        """Limpa traces coletados."""
+        """Clears collected traces."""
         self._traces = []
         self._start_times = {}
 
     def to_json(self, indent: int = 2) -> str:
-        """Retorna traces como JSON string."""
+        """Returns traces as JSON string."""
         return json.dumps(self._traces, indent=indent, default=str)
 
     def on_chain_start(
@@ -189,7 +187,7 @@ class TraceHandler(BaseCallbackHandler):
         inputs: Any,
         **kwargs: Any,
     ) -> None:
-        """Chamado quando uma chain/node inicia."""
+        """Called when a chain/node starts."""
         run_id = str(kwargs.get("run_id", ""))
         self._start_times[run_id] = datetime.now()
 
@@ -206,7 +204,7 @@ class TraceHandler(BaseCallbackHandler):
         outputs: Any,
         **kwargs: Any,
     ) -> None:
-        """Chamado quando uma chain/node termina."""
+        """Called when a chain/node finishes."""
         run_id = str(kwargs.get("run_id", ""))
         start_time = self._start_times.pop(run_id, None)
 
@@ -227,7 +225,7 @@ class TraceHandler(BaseCallbackHandler):
         error: BaseException,
         **kwargs: Any,
     ) -> None:
-        """Chamado quando uma chain/node falha."""
+        """Called when a chain/node fails."""
         run_id = str(kwargs.get("run_id", ""))
 
         self._traces.append({

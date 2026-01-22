@@ -3,11 +3,7 @@
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 
-from langgraphlib.agent import Agent
-from langgraphlib.model import get_model
-from langgraphlib.state import MessagesState, create_state
-from langgraphlib.tool import Tool
-from langgraphlib.workflow import Workflow
+from langgraphlib import Agent, MessagesState, Tool, Workflow, create_state, get_model
 
 # Modelo padrão para os testes
 MODEL = get_model("openai/gpt-4o-mini")

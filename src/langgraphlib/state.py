@@ -5,12 +5,12 @@ from pydantic import BaseModel, ConfigDict, create_model
 
 
 def add_messages(current: list[AnyMessage], new: list[AnyMessage]) -> list[AnyMessage]:
-    """Reducer que adiciona mensagens ao estado existente."""
+    """Reducer that appends messages to existing state."""
     return current + new
 
 
 class BaseState(BaseModel):
-    """Estado base para agentes com mensagens."""
+    """Base state for agents with messages."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -24,26 +24,26 @@ def create_state(
     **fields: Any,
 ) -> type[BaseModel]:
     """
-    Cria um State dinamicamente com campos personalizados.
+    Dynamically creates a State with custom fields.
 
     Args:
-        name: Nome da classe de estado gerada.
-        include_messages: Se True, inclui o campo messages com reducer.
-        **fields: Campos adicionais no formato nome=(tipo, default) ou nome=tipo.
+        name: Name of the generated state class.
+        include_messages: If True, includes the messages field with reducer.
+        **fields: Additional fields in format name=(type, default) or name=type.
 
     Returns:
-        Classe Pydantic configurada como State.
+        Pydantic class configured as State.
 
     Examples:
-        # State simples com messages + contador
+        # Simple state with messages + counter
         MyState = create_state(counter=(int, 0))
 
-        # State sem messages
+        # State without messages
         CustomState = create_state(
             "CustomState", include_messages=False, data=(dict, {})
         )
 
-        # State com tipo sem default
+        # State with type without default
         TaskState = create_state(task_id=str, status=(str, "pending"))
     """
     field_definitions: dict[str, Any] = {}
@@ -67,5 +67,5 @@ def create_state(
     )
 
 
-# Estados pré-definidos comuns
+# Pre-defined common states
 MessagesState = create_state("MessagesState")

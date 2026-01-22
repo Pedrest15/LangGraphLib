@@ -1,4 +1,4 @@
-"""LangGraphLib - Biblioteca para abstrair o uso do LangGraph."""
+"""LangGraphLib - Library to abstract the use of LangGraph."""
 
 from langgraphlib.agent import Agent
 from langgraphlib.callbacks import LoggingHandler, TraceHandler

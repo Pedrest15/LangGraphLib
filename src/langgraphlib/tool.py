@@ -7,28 +7,28 @@ from pydantic import BaseModel
 
 class Tool:
     """
-    Wrapper para criar um ToolNode a partir de uma lista de callables.
+    Wrapper for creating a ToolNode from a list of callables.
 
-    O Tool encapsula a criação de um ToolNode do LangGraph, permitindo
-    que o usuário defina nós de ferramentas de forma simples.
+    The Tool encapsulates the creation of a LangGraph ToolNode, allowing
+    users to define tool nodes in a simple way.
 
     Examples:
         from langgraphlib.tool import Tool
 
-        # Definir ferramentas
+        # Define tools
         def search(query: str) -> str:
-            '''Busca informações.'''
-            return f"Resultados para: {query}"
+            '''Searches for information.'''
+            return f"Results for: {query}"
 
         def calculate(expression: str) -> str:
-            '''Calcula expressão matemática.'''
+            '''Calculates mathematical expression.'''
             return str(eval(expression))
 
-        # Criar Tool com uma lista de callables
+        # Create Tool with a list of callables
         search_tool = Tool(name="search_tools", tools=[search])
         calc_tool = Tool(name="calc_tools", tools=[calculate])
 
-        # Usar no Workflow
+        # Use in Workflow
         workflow = Workflow(
             state=MessagesState,
             agents=[agent],
@@ -50,11 +50,11 @@ class Tool:
         tools: list[Callable[..., Any]],
     ) -> None:
         """
-        Inicializa o Tool.
+        Initializes the Tool.
 
         Args:
-            name: Nome do nó de ferramentas.
-            tools: Lista de callables que serão as ferramentas disponíveis.
+            name: Name of the tool node.
+            tools: List of callables that will be the available tools.
         """
         self._name = name
         self._tools = tools
@@ -62,44 +62,44 @@ class Tool:
 
     @property
     def name(self) -> str:
-        """Nome do nó de ferramentas."""
+        """Name of the tool node."""
         return self._name
 
     @property
     def tools(self) -> list[Callable[..., Any]]:
-        """Lista de ferramentas."""
+        """List of tools."""
         return self._tools
 
     @property
     def node(self) -> ToolNode:
-        """ToolNode do LangGraph."""
+        """LangGraph ToolNode."""
         return self._node
 
     def __call__(self, state: BaseModel) -> dict[str, Any]:
         """
-        Executa o ToolNode com o state fornecido.
+        Executes the ToolNode with the provided state.
 
         Args:
-            state: Instância do state com os dados de entrada.
+            state: State instance with input data.
 
         Returns:
-            Dict com as mensagens resultantes das tool calls.
+            Dict with messages resulting from tool calls.
         """
         return self._node.invoke(state)
 
     async def ainvoke(self, state: BaseModel) -> dict[str, Any]:
         """
-        Executa o ToolNode de forma assíncrona.
+        Executes the ToolNode asynchronously.
 
         Args:
-            state: Instância do state com os dados de entrada.
+            state: State instance with input data.
 
         Returns:
-            Dict com as mensagens resultantes das tool calls.
+            Dict with messages resulting from tool calls.
         """
         return await self._node.ainvoke(state)
 
     def __repr__(self) -> str:
-        """Representação do Tool."""
+        """Tool representation."""
         tool_names = [t.__name__ for t in self._tools]
         return f"Tool(name={self._name!r}, tools={tool_names})"
