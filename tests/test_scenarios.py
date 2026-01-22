@@ -443,6 +443,484 @@ def test_scenario_4_supervisor_writer_reviewer():
 
 
 # =============================================================================
+# Cenário 5: Execução paralela (fan-out e fan-in)
+# =============================================================================
+
+
+def test_scenario_5a_parallel_execution_with_list_syntax():
+    """
+    Testa execução paralela usando sintaxe de lista para fan-out.
+    Dois agentes executam em paralelo e convergem para um terceiro.
+    """
+    import operator
+    from typing import Annotated
+
+    # State com reducer para acumular resultados
+    ParallelState = create_state(results=(Annotated[list[str], operator.add], []))
+
+    # Agentes que escrevem em "results"
+    researcher = Agent(
+        model=MODEL,
+        name="researcher",
+        prompt="Você é um pesquisador. Retorne apenas: 'Pesquisa concluída'",
+        output_fields="results",
+        state=ParallelState,
+    )
+
+    analyst = Agent(
+        model=MODEL,
+        name="analyst",
+        prompt="Você é um analista. Retorne apenas: 'Análise concluída'",
+        output_fields="results",
+        state=ParallelState,
+    )
+
+    summarizer = Agent(
+        model=MODEL,
+        name="summarizer",
+        prompt=(
+            "Você é um sintetizador. Leia os resultados anteriores e "
+            "faça um resumo breve. Retorne apenas o resumo."
+        ),
+        input_fields="results",
+        output_fields="results",
+        state=ParallelState,
+    )
+
+    workflow = Workflow(
+        state=ParallelState,
+        agents=[researcher, analyst, summarizer],
+        edges=[
+            # Fan-out: start -> researcher E analyst (paralelo)
+            ("start", ["researcher", "analyst"]),
+            # Fan-in: ambos convergem para summarizer
+            ("researcher", "summarizer"),
+            ("analyst", "summarizer"),
+            ("summarizer", "end"),
+        ],
+    )
+
+    graph = workflow.compile()
+
+    print("\n=== Cenário 5a: Execução Paralela (sintaxe lista) ===")
+
+    result = graph.invoke({"results": []})
+
+    print(f"Resultados: {result['results']}")
+
+    assert "results" in result
+    # Deve ter pelo menos 3 resultados: researcher, analyst, summarizer
+    assert len(result["results"]) >= 3
+
+
+def test_scenario_5b_parallel_execution_with_multiple_edges():
+    """
+    Testa execução paralela usando múltiplas edges para fan-out.
+    Equivalente ao teste anterior, mas com sintaxe de edges separadas.
+    """
+    import operator
+    from typing import Annotated
+
+    # State com reducer para acumular resultados
+    ParallelState = create_state(results=(Annotated[list[str], operator.add], []))
+
+    # Agentes que escrevem em "results"
+    researcher = Agent(
+        model=MODEL,
+        name="researcher",
+        prompt="Você é um pesquisador. Retorne apenas: 'Pesquisa concluída'",
+        output_fields="results",
+        state=ParallelState,
+    )
+
+    analyst = Agent(
+        model=MODEL,
+        name="analyst",
+        prompt="Você é um analista. Retorne apenas: 'Análise concluída'",
+        output_fields="results",
+        state=ParallelState,
+    )
+
+    summarizer = Agent(
+        model=MODEL,
+        name="summarizer",
+        prompt=(
+            "Você é um sintetizador. Leia os resultados anteriores e "
+            "faça um resumo breve. Retorne apenas o resumo."
+        ),
+        input_fields="results",
+        output_fields="results",
+        state=ParallelState,
+    )
+
+    workflow = Workflow(
+        state=ParallelState,
+        agents=[researcher, analyst, summarizer],
+        edges=[
+            # Fan-out usando múltiplas edges
+            ("start", "researcher"),
+            ("start", "analyst"),
+            # Fan-in: ambos convergem para summarizer
+            ("researcher", "summarizer"),
+            ("analyst", "summarizer"),
+            ("summarizer", "end"),
+        ],
+    )
+
+    graph = workflow.compile()
+
+    print("\n=== Cenário 5b: Execução Paralela (múltiplas edges) ===")
+
+    result = graph.invoke({"results": []})
+
+    print(f"Resultados: {result['results']}")
+
+    assert "results" in result
+    # Deve ter pelo menos 3 resultados: researcher, analyst, summarizer
+    assert len(result["results"]) >= 3
+
+
+def test_scenario_5c_parallel_with_messages():
+    """
+    Testa execução paralela mantendo messages como state principal.
+    Usa MessagesState padrão com reducer add_messages.
+    """
+    # Agentes simples que respondem brevemente
+    fact_checker = Agent(
+        model=MODEL,
+        name="fact_checker",
+        prompt="Você verifica fatos. Responda brevemente: 'Fatos verificados.'",
+    )
+
+    grammar_checker = Agent(
+        model=MODEL,
+        name="grammar_checker",
+        prompt="Você verifica gramática. Responda brevemente: 'Gramática OK.'",
+    )
+
+    final_reviewer = Agent(
+        model=MODEL,
+        name="final_reviewer",
+        prompt=(
+            "Você é o revisor final. Analise as verificações anteriores "
+            "e dê um parecer final breve."
+        ),
+    )
+
+    workflow = Workflow(
+        state=MessagesState,
+        agents=[fact_checker, grammar_checker, final_reviewer],
+        edges=[
+            # Fan-out: verificações em paralelo
+            ("start", ["fact_checker", "grammar_checker"]),
+            # Fan-in: convergem para revisor final
+            ("fact_checker", "final_reviewer"),
+            ("grammar_checker", "final_reviewer"),
+            ("final_reviewer", "end"),
+        ],
+    )
+
+    graph = workflow.compile()
+
+    print("\n=== Cenário 5c: Execução Paralela com Messages ===")
+
+    result = graph.invoke(
+        {
+            "messages": [
+                HumanMessage(content="Verifique este texto: O sol é uma estrela.")
+            ]
+        }
+    )
+
+    print(f"Total de mensagens: {len(result['messages'])}")
+    for i, msg in enumerate(result["messages"]):
+        role = msg.__class__.__name__.replace("Message", "")
+        content = msg.content[:100] + "..." if len(msg.content) > 100 else msg.content
+        print(f"  {i + 1}. [{role}]: {content}")
+
+    assert "messages" in result
+    # Pelo menos 4: input, fact_checker, grammar_checker, final_reviewer
+    assert len(result["messages"]) >= 4
+
+
+# =============================================================================
+# Cenário 6: Map-Reduce com Send (fan-out dinâmico)
+# =============================================================================
+
+
+def test_scenario_6a_map_reduce_with_send():
+    """
+    Testa map-reduce usando Send para fan-out dinâmico.
+    Número de branches determinado em runtime baseado nos dados.
+    """
+    import operator
+    from typing import Annotated
+
+    from langgraphlib import Send
+
+    # State com lista de itens para processar e resultados acumulados
+    MapReduceState = create_state(
+        items=(list[str], []),
+        results=(Annotated[list[str], operator.add], []),
+    )
+
+    # Função de distribuição: cria um Send para cada item
+    def distribute_items(state) -> list[Send]:
+        return [
+            Send("process_item", {"items": [], "results": [], "current_item": item})
+            for item in state.items
+        ]
+
+    # Nó que processa cada item individualmente
+    def process_item(state) -> dict:
+        item = state.get("current_item", "unknown")
+        return {"results": [f"Processado: {item}"]}
+
+    workflow = Workflow(
+        state=MapReduceState,
+        nodes={"process_item": process_item},
+        edges=[
+            # Fan-out dinâmico: distribui para N instâncias de process_item
+            ("start", distribute_items),
+            # Fan-in: todas as instâncias convergem para end
+            ("process_item", "end"),
+        ],
+    )
+
+    graph = workflow.compile()
+
+    print("\n=== Cenário 6a: Map-Reduce com Send ===")
+
+    # Testa com 3 itens
+    result = graph.invoke({"items": ["item_a", "item_b", "item_c"], "results": []})
+
+    print(f"Items processados: {result['results']}")
+
+    assert "results" in result
+    # Deve ter 3 resultados (um para cada item)
+    assert len(result["results"]) == 3
+    assert "Processado: item_a" in result["results"]
+    assert "Processado: item_b" in result["results"]
+    assert "Processado: item_c" in result["results"]
+
+
+def test_scenario_6b_map_reduce_with_agent():
+    """
+    Testa map-reduce usando Send com agentes LLM.
+    Cada item é processado por um agente em paralelo.
+    """
+    import operator
+    from typing import Annotated
+
+    from langgraphlib import Send
+
+    # State com lista de tópicos e análises acumuladas
+    AnalysisState = create_state(
+        topics=(list[str], []),
+        analyses=(Annotated[list[str], operator.add], []),
+        current_topic=(str, ""),
+    )
+
+    # Agente que analisa cada tópico
+    analyzer = Agent(
+        model=MODEL,
+        name="analyzer",
+        prompt="Analise brevemente o tópico fornecido em 1 frase.",
+        input_fields="current_topic",
+        output_fields="analyses",
+        state=AnalysisState,
+    )
+
+    # Função de distribuição: cria um Send para cada tópico
+    def distribute_topics(state) -> list[Send]:
+        return [
+            Send(
+                "analyzer",
+                {"topics": [], "analyses": [], "current_topic": topic},
+            )
+            for topic in state.topics
+        ]
+
+    workflow = Workflow(
+        state=AnalysisState,
+        agents=[analyzer],
+        edges=[
+            ("start", distribute_topics),
+            ("analyzer", "end"),
+        ],
+    )
+
+    graph = workflow.compile()
+
+    print("\n=== Cenário 6b: Map-Reduce com Agent ===")
+
+    # Testa com 2 tópicos para ser rápido
+    result = graph.invoke({
+        "topics": ["inteligência artificial", "energia renovável"],
+        "analyses": [],
+        "current_topic": "",
+    })
+
+    print(f"Análises: {len(result['analyses'])} tópicos analisados")
+    for i, analysis in enumerate(result["analyses"]):
+        preview = analysis[:80] + "..." if len(analysis) > 80 else analysis
+        print(f"  {i + 1}. {preview}")
+
+    assert "analyses" in result
+    # Deve ter 2 análises (uma para cada tópico)
+    assert len(result["analyses"]) == 2
+
+
+def test_scenario_6c_map_reduce_empty_list():
+    """
+    Testa comportamento quando a lista de itens está vazia.
+    Deve ir direto para o end sem processar nada.
+    """
+    import operator
+    from typing import Annotated
+
+    from langgraphlib import Send
+
+    MapReduceState = create_state(
+        items=(list[str], []),
+        results=(Annotated[list[str], operator.add], []),
+    )
+
+    def distribute_items(state) -> list[Send]:
+        # Se não há itens, retorna lista vazia de Sends
+        return [
+            Send("process_item", {"items": [], "results": [], "current_item": item})
+            for item in state.items
+        ]
+
+    def process_item(state) -> dict:
+        item = state.get("current_item", "unknown")
+        return {"results": [f"Processado: {item}"]}
+
+    workflow = Workflow(
+        state=MapReduceState,
+        nodes={"process_item": process_item},
+        edges=[
+            ("start", distribute_items),
+            ("process_item", "end"),
+        ],
+    )
+
+    graph = workflow.compile()
+
+    print("\n=== Cenário 6c: Map-Reduce com lista vazia ===")
+
+    # Testa com lista vazia
+    result = graph.invoke({"items": [], "results": []})
+
+    print(f"Items processados: {result['results']}")
+
+    assert "results" in result
+    # Com lista vazia, não deve ter resultados
+    assert len(result["results"]) == 0
+
+
+# =============================================================================
+# Cenário 7: Streaming de tokens LLM
+# =============================================================================
+
+
+def test_scenario_7a_streaming_messages():
+    """
+    Testa streaming de tokens LLM usando stream_mode="messages".
+    Verifica que os chunks são recebidos progressivamente.
+    """
+    agent = Agent(
+        model=MODEL,
+        name="writer",
+        prompt="Escreva uma frase curta sobre programação.",
+    )
+
+    workflow = Workflow(
+        state=MessagesState,
+        agents=[agent],
+        edges=[
+            ("start", "writer"),
+            ("writer", "end"),
+        ],
+    )
+
+    workflow.compile()
+
+    print("\n=== Cenário 7a: Streaming de Mensagens ===")
+
+    chunks_received = []
+    full_content = ""
+
+    for chunk, _metadata in workflow.stream(
+        {"messages": [HumanMessage(content="Oi")]}
+    ):
+        chunks_received.append(chunk)
+        if hasattr(chunk, "content") and chunk.content:
+            full_content += chunk.content
+            print(chunk.content, end="", flush=True)
+
+    print()  # Nova linha após streaming
+    print(f"Total de chunks recebidos: {len(chunks_received)}")
+    print(f"Conteúdo final: {full_content[:100]}...")
+
+    # Verificações
+    assert len(chunks_received) > 0, "Deve receber pelo menos um chunk"
+    assert len(full_content) > 0, "Deve ter conteúdo acumulado"
+
+
+def test_scenario_7b_streaming_multiple_agents():
+    """
+    Testa streaming com múltiplos agentes em sequência.
+    Verifica que os tokens de cada agente são recebidos.
+    """
+    researcher = Agent(
+        model=MODEL,
+        name="researcher",
+        prompt="Diga uma frase curta sobre pesquisa.",
+    )
+
+    writer = Agent(
+        model=MODEL,
+        name="writer",
+        prompt="Diga uma frase curta sobre escrita.",
+    )
+
+    workflow = Workflow(
+        state=MessagesState,
+        agents=[researcher, writer],
+        edges=[
+            ("start", "researcher"),
+            ("researcher", "writer"),
+            ("writer", "end"),
+        ],
+    )
+
+    workflow.compile()
+
+    print("\n=== Cenário 7b: Streaming com Múltiplos Agentes ===")
+
+    chunks_by_node: dict[str, list] = {}
+
+    for chunk, metadata in workflow.stream(
+        {"messages": [HumanMessage(content="Olá")]}
+    ):
+        node = metadata.get("langgraph_node", "unknown")
+        if node not in chunks_by_node:
+            chunks_by_node[node] = []
+        chunks_by_node[node].append(chunk)
+
+        if hasattr(chunk, "content") and chunk.content:
+            print(f"[{node}] {chunk.content}", end="", flush=True)
+
+    print()  # Nova linha
+    print(f"Nodes que emitiram chunks: {list(chunks_by_node.keys())}")
+
+    # Verificações
+    assert len(chunks_by_node) > 0, "Deve ter chunks de pelo menos um node"
+
+
+# =============================================================================
 # Execução dos testes
 # =============================================================================
 if __name__ == "__main__":
@@ -455,6 +933,14 @@ if __name__ == "__main__":
     test_scenario_3_supervisor_with_function_nodes()
     test_scenario_3b_conditional_edges()
     test_scenario_4_supervisor_writer_reviewer()
+    test_scenario_5a_parallel_execution_with_list_syntax()
+    test_scenario_5b_parallel_execution_with_multiple_edges()
+    test_scenario_5c_parallel_with_messages()
+    test_scenario_6a_map_reduce_with_send()
+    test_scenario_6b_map_reduce_with_agent()
+    test_scenario_6c_map_reduce_empty_list()
+    test_scenario_7a_streaming_messages()
+    test_scenario_7b_streaming_multiple_agents()
 
     print("\n" + "=" * 60)
     print("TODOS OS TESTES CONCLUÍDOS!")

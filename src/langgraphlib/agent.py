@@ -1,3 +1,5 @@
+import asyncio
+import time
 from collections.abc import Callable
 from typing import Annotated, Any, Literal, get_args, get_origin
 from uuid import uuid4
@@ -104,6 +106,8 @@ class Agent:
         state: type[BaseModel] | None = None,
         input_fields: str | list[str] = "messages",
         output_fields: str | list[str] = "messages",
+        max_retries: int = 0,
+        timeout: float | None = None,
     ) -> None:
         """
         Inicializa o agente.
@@ -123,12 +127,16 @@ class Agent:
                 ou lista de strings para múltiplos campos.
             output_fields: Campo(s) do state para escrever output. Pode ser
                 string ou lista de strings para múltiplos campos.
+            max_retries: Número máximo de tentativas em caso de erro (default: 0).
+            timeout: Timeout em segundos para execução do modelo (default: None).
         """
         self._name = name or f"agent_{uuid4().hex[:8]}"
         self._prompt = prompt
         self._tools = tools or []
         self._destinations = destinations
         self._state_class = state
+        self._max_retries = max_retries
+        self._timeout = timeout
 
         # Normaliza para lista
         self._input_fields = (
@@ -380,18 +388,32 @@ class Agent:
         """Lista de destinos para roteamento dinâmico."""
         return self._destinations
 
+    @property
+    def max_retries(self) -> int:
+        """Número máximo de tentativas."""
+        return self._max_retries
+
+    @property
+    def timeout(self) -> float | None:
+        """Timeout em segundos."""
+        return self._timeout
+
     def _resolve_goto(self, goto: str) -> str | object:
         """Converte 'end' para constante END do LangGraph."""
         if goto.lower() == "end":
             return END
         return goto
 
-    def _prepare_input(self, state: BaseModel) -> dict[str, Any]:
+    def _prepare_input(self, state: BaseModel | dict[str, Any]) -> dict[str, Any]:
         """Prepara input para o modelo a partir do state."""
         input_data: dict[str, Any] = {}
 
         for field_name in self._input_fields:
-            input_value = getattr(state, field_name)
+            # Suporta tanto BaseModel quanto dict (usado por Send)
+            if isinstance(state, dict):
+                input_value = state.get(field_name)
+            else:
+                input_value = getattr(state, field_name)
 
             # Converte string para lista de HumanMessage
             if isinstance(input_value, str):
@@ -413,20 +435,108 @@ class Agent:
             return [AIMessage(content=value)]
         return value
 
-    def invoke(self, state: BaseModel) -> dict[str, Any] | Command:
+    def _invoke_with_retry(self, model: Any, input_data: dict[str, Any]) -> Any:
+        """
+        Executa o modelo com retry e timeout.
+
+        Args:
+            model: Modelo a ser invocado.
+            input_data: Dados de entrada.
+
+        Returns:
+            Resposta do modelo.
+
+        Raises:
+            TimeoutError: Se timeout for atingido.
+            Exception: Última exceção após esgotar retries.
+        """
+        last_exception: Exception | None = None
+
+        for attempt in range(self._max_retries + 1):
+            try:
+                if self._timeout:
+                    start_time = time.time()
+                    response = model.invoke(input_data)
+                    elapsed = time.time() - start_time
+                    if elapsed > self._timeout:
+                        raise TimeoutError(
+                            f"Timeout de {self._timeout}s atingido "
+                            f"(tempo: {elapsed:.2f}s)"
+                        )
+                    return response
+                else:
+                    return model.invoke(input_data)
+            except TimeoutError:
+                raise
+            except Exception as e:
+                last_exception = e
+                if attempt < self._max_retries:
+                    # Aguarda antes de retry (backoff exponencial)
+                    time.sleep(2**attempt * 0.5)
+                    continue
+                raise
+
+        if last_exception:
+            raise last_exception
+
+    async def _ainvoke_with_retry(self, model: Any, input_data: dict[str, Any]) -> Any:
+        """
+        Executa o modelo de forma assíncrona com retry e timeout.
+
+        Args:
+            model: Modelo a ser invocado.
+            input_data: Dados de entrada.
+
+        Returns:
+            Resposta do modelo.
+
+        Raises:
+            TimeoutError: Se timeout for atingido.
+            Exception: Última exceção após esgotar retries.
+        """
+        last_exception: Exception | None = None
+
+        for attempt in range(self._max_retries + 1):
+            try:
+                if self._timeout:
+                    response = await asyncio.wait_for(
+                        model.ainvoke(input_data),
+                        timeout=self._timeout,
+                    )
+                    return response
+                else:
+                    return await model.ainvoke(input_data)
+            except TimeoutError:
+                raise
+            except Exception as e:
+                last_exception = e
+                if attempt < self._max_retries:
+                    # Aguarda antes de retry (backoff exponencial)
+                    await asyncio.sleep(2**attempt * 0.5)
+                    continue
+                raise
+
+        if last_exception:
+            raise last_exception
+
+    def invoke(self, state: BaseModel | dict[str, Any]) -> dict[str, Any] | Command:
         """
         Executa o agente com o state fornecido.
 
         Args:
-            state: Instância do state com os dados de entrada.
+            state: Instância do state ou dict com os dados de entrada.
 
         Returns:
             - Se destinations configurado: Command com goto e update do state.
             - Se tem tool_calls: Command para {agent_name}_tools.
             - Caso contrário: Dict parcial para atualizar o state.
+
+        Raises:
+            TimeoutError: Se timeout for atingido.
+            Exception: Se todas as tentativas falharem.
         """
         input_data = self._prepare_input(state)
-        response = self._model.invoke(input_data)
+        response = self._invoke_with_retry(self._model, input_data)
 
         # Caso 1: destinations (router schema) sem tools - response é dict/BaseModel
         if self._destinations and self._router_schema and not self._tools:
@@ -489,7 +599,7 @@ class Agent:
             if primary_field == "messages":
                 router_input["messages"] = router_input.get("messages", []) + [response]
 
-            router_response = self._router_model.invoke(router_input)
+            router_response = self._invoke_with_retry(self._router_model, router_input)
 
             # Extrai goto
             if isinstance(router_response, dict):
@@ -502,20 +612,26 @@ class Agent:
         # Caso padrão: retorna dict para atualizar state
         return state_update
 
-    async def ainvoke(self, state: BaseModel) -> dict[str, Any] | Command:
+    async def ainvoke(
+        self, state: BaseModel | dict[str, Any]
+    ) -> dict[str, Any] | Command:
         """
         Executa o agente de forma assíncrona.
 
         Args:
-            state: Instância do state com os dados de entrada.
+            state: Instância do state ou dict com os dados de entrada.
 
         Returns:
             - Se destinations configurado: Command com goto e update do state.
             - Se tem tool_calls: Command para {agent_name}_tools.
             - Caso contrário: Dict parcial para atualizar o state.
+
+        Raises:
+            TimeoutError: Se timeout for atingido.
+            Exception: Se todas as tentativas falharem.
         """
         input_data = self._prepare_input(state)
-        response = await self._model.ainvoke(input_data)
+        response = await self._ainvoke_with_retry(self._model, input_data)
 
         # Caso 1: destinations (router schema) sem tools - response é dict/BaseModel
         if self._destinations and self._router_schema and not self._tools:
@@ -578,7 +694,9 @@ class Agent:
             if primary_field == "messages":
                 router_input["messages"] = router_input.get("messages", []) + [response]
 
-            router_response = await self._router_model.ainvoke(router_input)
+            router_response = await self._ainvoke_with_retry(
+                self._router_model, router_input
+            )
 
             # Extrai goto
             if isinstance(router_response, dict):

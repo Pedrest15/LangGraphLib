@@ -1,7 +1,8 @@
 """LangGraphLib - Biblioteca para abstrair o uso do LangGraph."""
 
 from langgraphlib.agent import Agent
-from langgraphlib.edge import Condition, Edge
+from langgraphlib.callbacks import LoggingHandler, TraceHandler
+from langgraphlib.edge import Condition, DistributionFunc, Edge, Send
 from langgraphlib.memory import (
     AsyncMemoryManager,
     MemoryManager,
@@ -18,6 +19,7 @@ from langgraphlib.memory import (
 )
 from langgraphlib.model import get_embeddings, get_model
 from langgraphlib.state import MessagesState, create_state
+from langgraphlib.streaming import MessageStreamChunk
 from langgraphlib.tool import Tool
 from langgraphlib.workflow import Workflow
 
@@ -26,6 +28,8 @@ __all__ = [
     "Agent",
     "Workflow",
     "Tool",
+    # Streaming
+    "MessageStreamChunk",
     # State
     "create_state",
     "MessagesState",
@@ -35,6 +39,11 @@ __all__ = [
     # Edge
     "Edge",
     "Condition",
+    "DistributionFunc",
+    "Send",
+    # Callbacks
+    "LoggingHandler",
+    "TraceHandler",
     # Memory - Classes
     "MemoryManager",
     "AsyncMemoryManager",
