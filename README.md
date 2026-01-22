@@ -720,6 +720,10 @@ with open("graph.png", "wb") as f:
 - langchain-core >= 0.3
 - pydantic >= 2.0
 
+## Contributing
+
+Contributions are welcome! Feel free to open issues and pull requests.
+
 ## License
 
 MIT
