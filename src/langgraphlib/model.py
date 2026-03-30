@@ -168,8 +168,8 @@ def get_model(
         **kwargs,
     }
 
-    # Bedrock does not support streaming as a constructor parameter
-    if provider != "bedrock":
+    # Only pass streaming if enabled (some providers like Bedrock don't support it)
+    if streaming:
         model_kwargs["streaming"] = streaming
 
     # Set api_key on model kwargs
