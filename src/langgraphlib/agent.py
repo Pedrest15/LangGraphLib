@@ -31,7 +31,7 @@ class Agent:
         from langgraphlib.model import get_model
         from langgraphlib.state import create_state, MessagesState
 
-        model = get_model("openai/gpt-4o")
+        model = get_model("openai/gpt-4o", api_key="sk-...")
 
         # Simple agent with messages
         agent = Agent(model=model, prompt="You are a helpful assistant.")

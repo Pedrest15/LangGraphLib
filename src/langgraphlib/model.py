@@ -1,11 +1,8 @@
+import os
 from typing import Any
 
-from dotenv import load_dotenv
+import langchain_core.language_models
 from langchain_core.embeddings import Embeddings
-from langchain_core.language_models import BaseChatModel
-
-# Load environment variables from .env
-load_dotenv()
 
 
 class ModelError(Exception):
@@ -65,13 +62,12 @@ def _get_provider_class(provider: str) -> tuple[type, dict[str, Any]]:
         "cohere": ("langchain_cohere", "ChatCohere", {}),
         "fireworks": ("langchain_fireworks", "ChatFireworks", {}),
         "together": ("langchain_together", "ChatTogether", {}),
+        "bedrock": ("langchain_aws", "ChatBedrockConverse", {}),
     }
 
     if provider not in providers:
         available = list(providers.keys())
-        raise ModelError(
-            f"Provider '{provider}' not supported. Available: {available}"
-        )
+        raise ModelError(f"Provider '{provider}' not supported. Available: {available}")
 
     module_name, class_name, default_kwargs = providers[provider]
 
@@ -102,13 +98,13 @@ def _get_embedding_class(provider: str) -> tuple[type, dict[str, Any]]:
         "cohere": ("langchain_cohere", "CohereEmbeddings", {}),
         "mistral": ("langchain_mistralai", "MistralAIEmbeddings", {}),
         "huggingface": ("langchain_huggingface", "HuggingFaceEmbeddings", {}),
+        "bedrock": ("langchain_aws", "BedrockEmbeddings", {}),
     }
 
     if provider not in providers:
         available = list(providers.keys())
         raise ModelError(
-            f"Embedding provider '{provider}' not supported. "
-            f"Available: {available}"
+            f"Embedding provider '{provider}' not supported. Available: {available}"
         )
 
     module_name, class_name, default_kwargs = providers[provider]
@@ -125,18 +121,18 @@ def _get_embedding_class(provider: str) -> tuple[type, dict[str, Any]]:
 def get_model(
     model: str,
     *,
-    api_key: str | None = None,
+    api_key: str,
     temperature: float = 0,
     max_tokens: int | None = None,
     streaming: bool = False,
     **kwargs: Any,
-) -> BaseChatModel:
+) -> langchain_core.language_models.BaseChatModel:
     """
     Gets a configured chat model.
 
     Args:
         model: String in "provider/model" format (e.g.: "openai/gpt-4o")
-        api_key: Provider API key (uses env var if not provided)
+        api_key: Provider API key. For Bedrock, use the AWS bearer token.
         temperature: Temperature for generation (0-2)
         max_tokens: Token limit in response
         streaming: Enable streaming
@@ -147,16 +143,20 @@ def get_model(
 
     Examples:
         # OpenAI
-        model = get_model("openai/gpt-4o", temperature=0.7)
+        model = get_model("openai/gpt-4o", api_key="sk-...", temperature=0.7)
 
-        # Anthropic with explicit API key
+        # Anthropic
         model = get_model("anthropic/claude-3-sonnet", api_key="sk-...")
 
-        # Local Ollama
-        model = get_model("ollama/llama3")
+        # AWS Bedrock (API Key authentication)
+        model = get_model(
+            "bedrock/anthropic.claude-3-sonnet-20240229-v1:0",
+            api_key="ABSK...",
+            region_name="us-east-1",
+        )
 
-        # With streaming
-        model = get_model("openai/gpt-4o-mini", streaming=True)
+        # Local Ollama (no real key needed)
+        model = get_model("ollama/llama3", api_key="")
     """
     provider, model_name = _parse_model_string(model)
     model_class, default_kwargs = _get_provider_class(provider)
@@ -170,19 +170,13 @@ def get_model(
         **kwargs,
     }
 
-    # Add api_key if provided
-    if api_key:
-        # Different providers use different names for api_key
+    # Set api_key on model kwargs
+    if provider == "bedrock":
+        os.environ["AWS_BEARER_TOKEN_BEDROCK"] = api_key
+    else:
         api_key_names = {
-            "openai": "api_key",
-            "anthropic": "api_key",
-            "groq": "api_key",
             "google": "google_api_key",
-            "mistral": "api_key",
             "cohere": "cohere_api_key",
-            "fireworks": "api_key",
-            "together": "api_key",
-            "cerebras": "api_key",
         }
         key_name = api_key_names.get(provider, "api_key")
         model_kwargs[key_name] = api_key
@@ -197,7 +191,7 @@ def get_model(
 def get_embeddings(
     model: str,
     *,
-    api_key: str | None = None,
+    api_key: str,
     **kwargs: Any,
 ) -> Embeddings:
     """
@@ -205,7 +199,7 @@ def get_embeddings(
 
     Args:
         model: String in "provider/model" format (e.g.: "openai/text-embedding-3-small")
-        api_key: Provider API key (uses env var if not provided)
+        api_key: Provider API key. For Bedrock, use the AWS bearer token.
         **kwargs: Extra parameters passed to the LangChain model
 
     Returns:
@@ -213,31 +207,36 @@ def get_embeddings(
 
     Examples:
         # OpenAI
-        embeddings = get_embeddings("openai/text-embedding-3-small")
+        embeddings = get_embeddings("openai/text-embedding-3-small", api_key="sk-...")
 
-        # Local Ollama
-        embeddings = get_embeddings("ollama/nomic-embed-text")
+        # AWS Bedrock
+        embeddings = get_embeddings(
+            "bedrock/amazon.titan-embed-text-v1",
+            api_key="ABSK...",
+            region_name="us-east-1",
+        )
 
-        # Local HuggingFace
-        embeddings = get_embeddings("huggingface/all-MiniLM-L6-v2")
+        # Local Ollama (no real key needed)
+        embeddings = get_embeddings("ollama/nomic-embed-text", api_key="")
     """
     provider, model_name = _parse_model_string(model)
     embedding_class, default_kwargs = _get_embedding_class(provider)
 
-    # Build kwargs
+    # Build kwargs — BedrockEmbeddings uses "model_id" instead of "model"
+    model_param_name = "model_id" if provider == "bedrock" else "model"
     model_kwargs = {
         **default_kwargs,
-        "model": model_name,
+        model_param_name: model_name,
         **kwargs,
     }
 
-    # Add api_key if provided
-    if api_key:
+    # Set api_key on model kwargs
+    if provider == "bedrock":
+        os.environ["AWS_BEARER_TOKEN_BEDROCK"] = api_key
+    else:
         api_key_names = {
-            "openai": "api_key",
             "google": "google_api_key",
             "cohere": "cohere_api_key",
-            "mistral": "api_key",
         }
         key_name = api_key_names.get(provider, "api_key")
         model_kwargs[key_name] = api_key
@@ -264,6 +263,7 @@ def list_providers() -> dict[str, list[str]]:
             "cohere",
             "fireworks",
             "together",
+            "bedrock",
         ],
         "embedding": [
             "openai",
@@ -272,5 +272,6 @@ def list_providers() -> dict[str, list[str]]:
             "cohere",
             "mistral",
             "huggingface",
+            "bedrock",
         ],
     }

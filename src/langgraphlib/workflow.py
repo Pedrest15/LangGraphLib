@@ -22,7 +22,7 @@ class Workflow:
         from langgraphlib import Workflow, Agent, create_state
         from langgraphlib.model import get_model
 
-        model = get_model("openai/gpt-4o")
+        model = get_model("openai/gpt-4o", api_key="sk-...")
         State = create_state()
 
         researcher = Agent(model=model, name="researcher", prompt="Research...")
