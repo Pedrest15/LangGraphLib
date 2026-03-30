@@ -79,25 +79,38 @@ def _get_provider_class(provider: str) -> tuple[type, dict[str, Any]]:
         ) from e
 
 
-def _get_embedding_class(provider: str) -> tuple[type, dict[str, Any]]:
+def _get_embedding_class(
+    provider: str,
+) -> tuple[type, dict[str, Any], str]:
     """
     Dynamically imports the embedding class for the provider.
 
     Returns:
-        Tuple (embedding_class, extra_kwargs)
+        Tuple (embedding_class, extra_kwargs, model_param_name)
     """
-    providers: dict[str, tuple[str, str, dict[str, Any]]] = {
-        "openai": ("langchain_openai", "OpenAIEmbeddings", {}),
+    providers: dict[str, tuple[str, str, dict[str, Any], str]] = {
+        "openai": ("langchain_openai", "OpenAIEmbeddings", {}, "model"),
         "ollama": (
             "langchain_ollama",
             "OllamaEmbeddings",
             {"base_url": "http://localhost:11434"},
+            "model",
         ),
-        "google": ("langchain_google_genai", "GoogleGenerativeAIEmbeddings", {}),
-        "cohere": ("langchain_cohere", "CohereEmbeddings", {}),
-        "mistral": ("langchain_mistralai", "MistralAIEmbeddings", {}),
-        "huggingface": ("langchain_huggingface", "HuggingFaceEmbeddings", {}),
-        "bedrock": ("langchain_aws", "BedrockEmbeddings", {}),
+        "google": (
+            "langchain_google_genai",
+            "GoogleGenerativeAIEmbeddings",
+            {},
+            "model",
+        ),
+        "cohere": ("langchain_cohere", "CohereEmbeddings", {}, "model"),
+        "mistral": ("langchain_mistralai", "MistralAIEmbeddings", {}, "model"),
+        "huggingface": (
+            "langchain_huggingface",
+            "HuggingFaceEmbeddings",
+            {},
+            "model",
+        ),
+        "bedrock": ("langchain_aws", "BedrockEmbeddings", {}, "model_id"),
     }
 
     if provider not in providers:
@@ -106,11 +119,11 @@ def _get_embedding_class(provider: str) -> tuple[type, dict[str, Any]]:
             f"Embedding provider '{provider}' not supported. Available: {available}"
         )
 
-    module_name, class_name, default_kwargs = providers[provider]
+    module_name, class_name, default_kwargs, model_param = providers[provider]
 
     try:
         module = __import__(module_name, fromlist=[class_name])
-        return getattr(module, class_name), default_kwargs
+        return getattr(module, class_name), default_kwargs, model_param
     except ImportError as e:
         raise ProviderNotInstalledError(
             f"Provider '{provider}' requires installation: pip install {module_name}"
@@ -219,13 +232,11 @@ def get_embeddings(
         embeddings = get_embeddings("ollama/nomic-embed-text", api_key="")
     """
     provider, model_name = _parse_model_string(model)
-    embedding_class, default_kwargs = _get_embedding_class(provider)
+    embedding_class, default_kwargs, model_param = _get_embedding_class(provider)
 
-    # Build kwargs — BedrockEmbeddings uses "model_id" instead of "model"
-    model_param_name = "model_id" if provider == "bedrock" else "model"
     model_kwargs = {
         **default_kwargs,
-        model_param_name: model_name,
+        model_param: model_name,
         **kwargs,
     }
 
