@@ -1,4 +1,3 @@
-import os
 from typing import Any
 
 import langchain_core.language_models
@@ -166,20 +165,20 @@ def get_model(
         **default_kwargs,
         "model": model_name,
         "temperature": temperature,
-        "streaming": streaming,
         **kwargs,
     }
 
+    # Bedrock does not support streaming as a constructor parameter
+    if provider != "bedrock":
+        model_kwargs["streaming"] = streaming
+
     # Set api_key on model kwargs
-    if provider == "bedrock":
-        os.environ["AWS_BEARER_TOKEN_BEDROCK"] = api_key
-    else:
-        api_key_names = {
-            "google": "google_api_key",
-            "cohere": "cohere_api_key",
-        }
-        key_name = api_key_names.get(provider, "api_key")
-        model_kwargs[key_name] = api_key
+    api_key_names = {
+        "google": "google_api_key",
+        "cohere": "cohere_api_key",
+    }
+    key_name = api_key_names.get(provider, "api_key")
+    model_kwargs[key_name] = api_key
 
     # Add max_tokens if specified
     if max_tokens:
@@ -231,15 +230,12 @@ def get_embeddings(
     }
 
     # Set api_key on model kwargs
-    if provider == "bedrock":
-        os.environ["AWS_BEARER_TOKEN_BEDROCK"] = api_key
-    else:
-        api_key_names = {
-            "google": "google_api_key",
-            "cohere": "cohere_api_key",
-        }
-        key_name = api_key_names.get(provider, "api_key")
-        model_kwargs[key_name] = api_key
+    api_key_names = {
+        "google": "google_api_key",
+        "cohere": "cohere_api_key",
+    }
+    key_name = api_key_names.get(provider, "api_key")
+    model_kwargs[key_name] = api_key
 
     return embedding_class(**model_kwargs)
 
