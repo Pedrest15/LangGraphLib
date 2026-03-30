@@ -29,6 +29,19 @@ dependencies = [
     "langchain-openai>=1.1.6",
 ]
 
+[project.optional-dependencies]
+bedrock = ["langchain-aws>=0.2"]
+anthropic = ["langchain-anthropic>=0.3"]
+google = ["langchain-google-genai>=2.0"]
+groq = ["langchain-groq>=0.2"]
+ollama = ["langchain-ollama>=0.2"]
+cerebras = ["langchain-cerebras>=0.4"]
+mistral = ["langchain-mistralai>=0.2"]
+cohere = ["langchain-cohere>=0.3"]
+fireworks = ["langchain-fireworks>=0.2"]
+together = ["langchain-together>=0.2"]
+huggingface = ["langchain-huggingface>=0.1"]
+
 [dependency-groups]
 dev = [
     "ruff>=0.8",
