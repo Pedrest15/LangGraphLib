@@ -17,6 +17,7 @@ from langgraphlib.memory import (
     create_recall_tool,
     create_remember_tool,
 )
+from langgraphlib.messages import create_image_message
 from langgraphlib.model import get_embeddings, get_model
 from langgraphlib.state import MessagesState, create_state
 from langgraphlib.streaming import MessageStreamChunk
@@ -28,36 +29,49 @@ __all__ = [
     "Agent",
     "Workflow",
     "Tool",
+
     # Streaming
     "MessageStreamChunk",
+
     # State
     "create_state",
     "MessagesState",
+
+    # Messages
+    "create_image_message",
+
     # Model
     "get_model",
     "get_embeddings",
+
     # Edge
     "Edge",
     "Condition",
     "DistributionFunc",
     "Send",
+
     # Callbacks
     "LoggingHandler",
     "TraceHandler",
+
     # Memory - Classes
     "MemoryManager",
     "AsyncMemoryManager",
+
     # Memory - Tools Sync
     "create_remember_tool",
     "create_recall_tool",
     "create_memory_tools",
+
     # Memory - Tools Async
     "create_async_remember_tool",
     "create_async_recall_tool",
     "create_async_memory_tools",
+
     # Memory - Nodes Sync
     "create_memory_saver_node",
     "create_memory_retriever_node",
+
     # Memory - Nodes Async
     "create_async_memory_saver_node",
     "create_async_memory_retriever_node",
