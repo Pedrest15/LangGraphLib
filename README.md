@@ -286,6 +286,13 @@ agent = Agent(
 # Create tool node (handles tool execution)
 agent_tools = Tool(name="assistant_tools", tools=[search, calculate])
 
+# Optional: error handling policy (same options as LangGraph's ToolNode)
+# agent_tools = Tool(
+#     name="assistant_tools",
+#     tools=[search, calculate],
+#     handle_tool_errors="The tool failed, please try again.",
+# )
+
 workflow = Workflow(
     state=MessagesState,
     agents=[agent],
@@ -298,6 +305,35 @@ workflow = Workflow(
     ],
 )
 ```
+
+### Async Tools and Run Config
+
+`Tool` is a LangGraph `Runnable`: in an async workflow (`mode="async"`) the
+graph calls `ainvoke`, so `async` tools work natively, and the run `config`
+(callbacks, `configurable`, runtime) is forwarded explicitly to every tool.
+
+```python
+from langchain_core.runnables import RunnableConfig
+
+@tool
+async def get_profile(user_id: int, *, config: RunnableConfig) -> str:
+    """Fetch a profile scoped to the current tenant."""
+    tenant = config["configurable"]["tenant"]
+    return await profiles.fetch(tenant, user_id)
+
+workflow = Workflow(
+    state=MessagesState,
+    agents=[agent],
+    nodes={"assistant_tools": Tool(name="assistant_tools", tools=[get_profile])},
+    edges=[...],
+    mode="async",
+)
+graph = workflow.compile()
+await graph.ainvoke({"messages": [...]}, config={"configurable": {"tenant": "acme"}})
+```
+
+> `Tool` only runs inside a compiled graph — `ToolNode` needs the LangGraph
+> runtime, so calling `tool_node(state)` directly outside a graph raises.
 
 ## Advanced Patterns
 
@@ -673,7 +709,7 @@ with open("graph.png", "wb") as f:
 |-------|-------------|
 | `Agent` | Wraps an LLM with prompt, tools, and routing configuration |
 | `Workflow` | Orchestrates agents into a LangGraph |
-| `Tool` | Creates a tool execution node from callable functions |
+| `Tool` | Runnable tool execution node (sync/async tools, run config, error handling) |
 
 ### State Functions
 
