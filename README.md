@@ -102,7 +102,7 @@ model = get_model("openai/gpt-4o")
 model = get_model("openai/gpt-4o-mini", temperature=0.7)
 
 # Anthropic
-model = get_model("anthropic/claude-3-5-sonnet-20241022")
+model = get_model("anthropic/claude-sonnet-5-5")
 
 # Groq (fast inference)
 model = get_model("groq/llama-3.1-70b-versatile")

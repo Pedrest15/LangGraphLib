@@ -21,7 +21,7 @@ def _parse_model_string(model_string: str) -> tuple[str, str]:
     Parses string in 'provider/model_name' format.
 
     Args:
-        model_string: String like "openai/gpt-4o" or "anthropic/claude-3-sonnet"
+        model_string: String like "openai/gpt-4o" or "anthropic/claude-sonnet-5-5"
 
     Returns:
         Tuple (provider, model_name)
@@ -134,7 +134,7 @@ def get_model(
     model: str,
     *,
     api_key: str,
-    temperature: float = 0,
+    temperature: float | None = None,
     max_tokens: int | None = None,
     streaming: bool = False,
     **kwargs: Any,
@@ -145,7 +145,10 @@ def get_model(
     Args:
         model: String in "provider/model" format (e.g.: "openai/gpt-4o")
         api_key: Provider API key. For Bedrock, use the AWS bearer token.
-        temperature: Temperature for generation (0-2)
+        temperature: Temperature for generation (0-2). When None (default) it is
+            not sent and the provider default applies. Newer Anthropic models
+            (e.g. Claude Sonnet 5.5+) reject sampling parameters
+            (temperature/top_p/top_k), so only set it for models that accept it.
         max_tokens: Token limit in response
         streaming: Enable streaming
         **kwargs: Extra parameters passed to the LangChain model
@@ -158,7 +161,7 @@ def get_model(
         model = get_model("openai/gpt-4o", api_key="sk-...", temperature=0.7)
 
         # Anthropic
-        model = get_model("anthropic/claude-3-sonnet", api_key="sk-...")
+        model = get_model("anthropic/claude-sonnet-5-5", api_key="sk-...")
 
         # AWS Bedrock (API Key authentication)
         model = get_model(
@@ -177,9 +180,12 @@ def get_model(
     model_kwargs = {
         **default_kwargs,
         "model": model_name,
-        "temperature": temperature,
         **kwargs,
     }
+
+    # Newer models reject sampling params, so only send temperature when asked
+    if temperature is not None:
+        model_kwargs["temperature"] = temperature
 
     # Only pass streaming if enabled (some providers like Bedrock don't support it)
     if streaming:

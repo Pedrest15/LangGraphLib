@@ -32,7 +32,7 @@ dependencies = [
 
 [project.optional-dependencies]
 bedrock = ["langchain-aws>=0.2"]
-anthropic = ["langchain-anthropic>=0.3"]
+anthropic = ["langchain-anthropic>=1.7.6"]
 google = ["langchain-google-genai>=2.0"]
 groq = ["langchain-groq>=0.2"]
 ollama = ["langchain-ollama>=0.2"]
